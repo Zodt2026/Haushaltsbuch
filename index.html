@@ -114,15 +114,16 @@ pre.ocr{white-space:pre-wrap;font-size:12px;background:var(--bg);padding:10px;bo
 <div id="toast"></div>
 <input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
 <input type="file" id="fileImg" accept="image/*" hidden>
+<input type="file" id="filePdf" accept="application/pdf,.pdf,image/*" hidden>
 <input type="file" id="fileJson" hidden>
 <script>
 "use strict";
 /* ============ Version & Neuigkeiten ============ */
-const VERSION = 'v 0.1';
+const VERSION = 'v 0.2';
 const WHATS_NEW = {
-  bugfix: ['Erste Version – noch keine Fehlerbehebungen'],
-  comfort: ['Kassenzettel direkt mit der Kamera fotografieren','Erkannte Artikel vor dem Speichern prüfen und korrigieren','Die App merkt sich deine Kategorie-Korrekturen'],
-  neu: ['Dashboard mit Restbudget und Kreisdiagramm nach Kategorien','Einkauf erfassen: Geschäft wählen, Bon fotografieren, Artikel automatisch kategorisieren','Verlauf mit Bearbeiten und Löschen','Admin: Budget, Mitarbeitende, Pakete, Import, CSV-Export, Wörterbuch','Mitarbeitende: Einkäufe als Datei an den Admin senden'],
+  bugfix: ['Keine Fehlerbehebungen in dieser Version'],
+  comfort: ['Digitale Kassenbons (eBon als PDF, z. B. aus der Rewe-, Lidl- oder Payback-App) werden direkt als Text gelesen – schnell und ohne Lesefehler','Gescannte PDFs werden automatisch per Texterkennung gelesen, auch mit mehreren Seiten'],
+  neu: ['Kassenzettel als PDF einlesen: neuer Knopf „PDF oder Datei wählen“','Auch beim Prüfen der Artikel kann eine weitere PDF-Seite oder Datei ergänzt werden'],
   soon: ['Belegfotos archivieren','Budget je Kategorie','Monatsbericht als PDF']
 };
 
@@ -440,12 +441,13 @@ function viewBuy(){
     const o = ui.ocr;
     return `${steps}<div class="card"><h2>2 · Kassenzettel</h2>
       <p class="small muted">${esc(d.store)} · ${dateDE(d.date)}</p>
-      ${o ? `<img class="preview" src="${o.url}" alt="Kassenzettel">
+      ${o ? `${o.url ? `<img class="preview" src="${o.url}" alt="Kassenzettel">` : `<div class="center" style="font-size:44px;margin:14px 0">📄</div>`}
         <div class="small">${esc(o.status)}</div><div class="prog"><div style="width:${Math.round(o.p * 100)}%"></div></div>
         ${o.error ? `<div class="warnbox">${esc(o.error)}</div><div style="height:10px"></div><button class="sec block" onclick="A.manual()">Stattdessen manuell erfassen</button>` : ''}`
       : `<p class="small muted">Leg den Bon flach auf einen dunklen Untergrund, gutes Licht, ganzer Bon im Bild. Lange Bons kannst du in zwei Fotos aufnehmen.</p>
         <button class="block" onclick="$('#fileCam').click()">📷 Foto aufnehmen</button><div style="height:8px"></div>
         <button class="sec block" onclick="$('#fileImg').click()">Bild aus Fotos wählen</button><div style="height:8px"></div>
+        <button class="sec block" onclick="$('#filePdf').click()">📄 PDF oder Datei wählen</button><div style="height:8px"></div>
         <button class="ghost block" onclick="A.manual()">Ohne Foto manuell erfassen</button>`}
       <div style="height:6px"></div><button class="ghost block" onclick="A.step(1)">‹ Zurück</button></div>`;
   }
@@ -459,7 +461,7 @@ function viewBuy(){
       <input class="price" inputmode="decimal" value="${moneyInput(it.price)}" placeholder="0,00" onchange="A.setItem(${i},'price',this.value)">
       ${catSelect(it.cat, `A.setItem(${i},'cat',this.value)`, 'cat')}
       <button class="del" onclick="A.delItem(${i})" aria-label="Entfernen">×</button></div>`).join('') || '<p class="muted small">Noch keine Artikel.</p>'}</div>
-    <div class="row wrap" style="margin-top:10px"><button class="sec" onclick="A.addItem()">+ Artikel</button><button class="sec" onclick="$('#fileImg').click()">+ Weiteres Foto</button></div>
+    <div class="row wrap" style="margin-top:10px"><button class="sec" onclick="A.addItem()">+ Artikel</button><button class="sec" onclick="$('#fileImg').click()">+ Weiteres Foto</button><button class="sec" onclick="$('#filePdf').click()">+ PDF</button></div>
     <div class="sumbox"><div class="spread"><span>Summe Artikel</span><b>${euro(sum)}</b></div>
       <div class="spread" style="margin-top:6px"><span class="small">Summe laut Bon</span><input style="width:110px;text-align:right" inputmode="decimal" value="${moneyInput(d.bonTotal)}" placeholder="optional" onchange="A.bonTotal(this.value)"></div></div>
     ${diff != null && Math.abs(diff) >= 0.01 ? `<div class="warnbox">Abweichung zum Bon: <b>${euro(diff)}</b>. Fehlt ein Artikel oder wurde ein Preis falsch gelesen? <button class="ghost small" onclick="A.fixDiff()">Als „Sonstiges“ ausgleichen</button></div>` : ''}
@@ -632,6 +634,10 @@ async function prepImage(url){
   if (w * sc * h * sc > 14e6) sc = Math.sqrt(14e6 / (w * h));
   const cv = document.createElement('canvas'); cv.width = Math.round(w * sc); cv.height = Math.round(h * sc);
   const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0, cv.width, cv.height);
+  return enhance(cv);
+}
+function enhance(cv){
+  const cx = cv.getContext('2d');
   const id = cx.getImageData(0, 0, cv.width, cv.height), d = id.data;
   for (let i = 0; i < d.length; i += 4){
     let g = d[i] * .299 + d[i+1] * .587 + d[i+2] * .114;
@@ -642,29 +648,86 @@ async function prepImage(url){
   return cv;
 }
 const OCR_STATUS = {'loading tesseract core':'Texterkennung wird geladen …','initializing tesseract':'Starte Texterkennung …','loading language traineddata':'Lade deutsches Wörterbuch (einmalig) …','initializing api':'Starte …','recognizing text':'Lese Kassenzettel …'};
+/* ---------- PDF ---------- */
+let pdfPromise = null;
+function loadPdfJs(){
+  if (window.pdfjsLib) return Promise.resolve();
+  if (!pdfPromise) pdfPromise = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = () => { pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; res(); };
+    s.onerror = () => { pdfPromise = null; rej(new Error('Der PDF-Leser konnte nicht geladen werden. Bitte Internetverbindung prüfen.')); };
+    document.head.appendChild(s);
+  });
+  return pdfPromise;
+}
+// Textebene einer PDF-Seite zu Zeilen zusammensetzen (nach y-Position gruppiert)
+function pdfLines(tc){
+  const parts = tc.items.filter(it => it.str && it.str.trim()).map(it => ({x: it.transform[4], y: it.transform[5], h: Math.abs(it.transform[3]) || 8, w: it.width || 0, s: it.str}));
+  parts.sort((a, b) => b.y - a.y || a.x - b.x);
+  const lines = [];
+  parts.forEach(p => {
+    const l = lines.find(l => Math.abs(l.y - p.y) < Math.max(2, p.h * 0.45));
+    l ? l.p.push(p) : lines.push({y: p.y, p: [p]});
+  });
+  lines.sort((a, b) => b.y - a.y);
+  return lines.map(l => { l.p.sort((a, b) => a.x - b.x); let out = '', lastEnd = null;
+    l.p.forEach(p => { if (lastEnd != null && p.x - lastEnd > 1) out += ' '; else if (out && !out.endsWith(' ')) out += ' '; out += p.s; lastEnd = p.x + p.w; });
+    return out.replace(/\s+/g, ' ').trim(); }).join('\n');
+}
+async function readPdf(file, setStatus){
+  await loadPdfJs();
+  setStatus('PDF wird geöffnet …', .05);
+  const pdf = await pdfjsLib.getDocument({data: new Uint8Array(await file.arrayBuffer())}).promise;
+  const n = Math.min(pdf.numPages, 6);
+  // 1. Versuch: digitale Textebene (eBon)
+  let text = '';
+  for (let i = 1; i <= n; i++){ const pg = await pdf.getPage(i); text += pdfLines(await pg.getTextContent()) + '\n'; }
+  if (/\d[.,]\d{2}/.test(text) && text.replace(/\s/g, '').length > 40) return {text, mode: 'text'};
+  // 2. Gescanntes PDF: Seiten rendern und Texterkennung
+  const w = await getWorker(); let all = '';
+  for (let i = 1; i <= n; i++){
+    setStatus(`Lese Seite ${i} von ${n} …`, .1 + .9 * (i - 1) / n);
+    const pg = await pdf.getPage(i); const vp0 = pg.getViewport({scale: 1});
+    const sc = Math.min(4, Math.max(1.5, 1700 / vp0.width)); const vp = pg.getViewport({scale: sc});
+    const cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+    const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height);
+    await pg.render({canvasContext: cx, viewport: vp}).promise;
+    if (i === 1 && ui.ocr){ ui.ocr.url = cv.toDataURL('image/jpeg', .6); render(); }
+    const {data} = await w.recognize(enhance(cv)); all += (data.text || '') + '\n';
+  }
+  return {text: all, mode: 'ocr'};
+}
+
 async function runOcr(file){
   const append = ui.draft.step === 3;
-  const url = URL.createObjectURL(file);
-  ui.draft.step = 2; ui.ocr = {url, status:'Bild wird vorbereitet …', p:0, error:null}; render();
+  const isPdf = /pdf/i.test(file.type) || /\.pdf$/i.test(file.name || '');
+  const url = isPdf ? '' : URL.createObjectURL(file);
+  ui.draft.step = 2; ui.ocr = {url, status: isPdf ? 'PDF wird geladen …' : 'Bild wird vorbereitet …', p:0, error:null}; render();
   const upd = () => { if (ui.tab === 'buy' && ui.draft && ui.draft.step === 2){ const o = ui.ocr; const pr = document.querySelector('.prog div'); const st = document.querySelector('.prog') && document.querySelector('.prog').previousElementSibling; if (pr) pr.style.width = Math.round(o.p * 100) + '%'; if (st) st.textContent = o.status; } };
-  ocrProgress = m => { ui.ocr.status = OCR_STATUS[m.status] || m.status; ui.ocr.p = m.status === 'recognizing text' ? .3 + m.progress * .7 : m.progress * .3; upd(); };
+  const setStatus = (t, p) => { ui.ocr.status = t; ui.ocr.p = p; upd(); };
+  ocrProgress = m => { if (isPdf && m.status === 'recognizing text') return; ui.ocr.status = OCR_STATUS[m.status] || m.status; ui.ocr.p = m.status === 'recognizing text' ? .3 + m.progress * .7 : m.progress * .3; upd(); };
   try {
-    const cv = await prepImage(url);
-    const w = await getWorker();
-    ui.ocr.status = 'Lese Kassenzettel …'; upd();
-    const {data} = await w.recognize(cv);
-    const res = parseReceipt(data.text || '');
+    let text;
+    if (isPdf){ text = (await readPdf(file, setStatus)).text; }
+    else {
+      const cv = await prepImage(url);
+      const w = await getWorker();
+      setStatus('Lese Kassenzettel …', .3);
+      text = (await w.recognize(cv)).data.text || '';
+    }
+    const res = parseReceipt(text);
     const d = ui.draft;
     d.items = append ? d.items.concat(res.items) : res.items;
     if (res.bonTotal != null) d.bonTotal = res.bonTotal;
-    d.ocrText = (append && d.ocrText ? d.ocrText + '\n— — —\n' : '') + (data.text || '');
+    d.ocrText = (append && d.ocrText ? d.ocrText + '\n— — —\n' : '') + text;
     d.step = 3; ui.ocr = null; render();
     toast(res.items.length ? `${res.items.length} Artikel erkannt – bitte prüfen` : 'Keine Artikel erkannt – bitte manuell ergänzen');
   } catch(e){
-    ui.ocr.error = e.message || String(e); ui.ocr.status = 'Fehler'; render();
+    ui.ocr.error = (e && e.name === 'PasswordException') ? 'Das PDF ist passwortgeschützt.' : (e.message || String(e)); ui.ocr.status = 'Fehler'; render();
   }
 }
-['#fileCam', '#fileImg'].forEach(sel => $(sel).addEventListener('change', e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f && ui.draft) runOcr(f); }));
+['#fileCam', '#fileImg', '#filePdf'].forEach(sel => $(sel).addEventListener('change', e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f && ui.draft) runOcr(f); }));
 
 /* ============ Aktionen ============ */
 const A = {
