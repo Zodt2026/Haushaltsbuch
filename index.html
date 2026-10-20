@@ -128,6 +128,9 @@ button.mini{background:var(--brand2);color:var(--brand);padding:3px 9px;font-siz
 .beleg{position:relative;margin-bottom:8px}
 .beleg img{width:100%;display:block;border-radius:8px;border:1px solid var(--line)}
 .bchip{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;background:var(--brand2);color:var(--brand);font-weight:600;margin-left:4px;vertical-align:1px}
+.wdays{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.wdays button{background:var(--brand2);color:var(--ink);padding:11px 0;font-weight:600}
+.wdays button.on{background:var(--brand);color:#fff}
 </style>
 </head>
 <body>
@@ -141,11 +144,11 @@ button.mini{background:var(--brand2);color:var(--brand);padding:3px 9px;font-siz
 <script>
 "use strict";
 /* ============ Version & Neuigkeiten ============ */
-const VERSION = 'v 0.4';
+const VERSION = 'v 0.5';
 const WHATS_NEW = {
-  bugfix: ['Mitarbeiterrabatt wird jetzt als Rabatt auf den ganzen Bon erfasst (vorher fälschlich vom letzten Artikel abgezogen)','Pfand wird zuverlässiger erkannt – auch mit „EUR“ oder mehreren Kennzeichen hinter dem Preis und nach der Summe (Leergut)','Rabatte nach der Zwischensumme werden nicht mehr übersehen'],
-  comfort: ['🧾 Beleg-Knopf an jedem Artikel: zeigt direkt den passenden Ausschnitt des Kassenbons zum Vergleich','Tipp auf den Ausschnitt öffnet den ganzen Beleg mit Markierung','Knopf „+ Pfand“ zum schnellen Nachtragen'],
-  neu: ['Marke je Artikel: Eigenmarke günstig, Eigenmarke Luxus oder die echte Marke (z. B. Orangina, Grünländer) – wird teilweise automatisch erkannt und gelernt','Packungsgröße (g, kg, ml, l, Stück) je Artikel – daraus wird der Kilo- bzw. Literpreis berechnet','Preisvergleich nutzt jetzt den Grundpreis und trennt nach Marke','Belegarchiv: Fotos und PDFs werden mit dem Einkauf gespeichert und im Verlauf angezeigt','Belege der Mitarbeitenden kommen mit der Export-Datei zum Admin'],
+  bugfix: ['Kategorie-Überschriften im Einkaufsdetail stehen wieder links'],
+  comfort: ['Empfehlung, wie viel pro Einkauf noch ausgegeben werden kann, damit das Budget reicht'],
+  neu: ['Einkaufsrhythmus festlegen: feste Wochentage (z. B. immer montags) oder Anzahl Einkäufe pro Monat – bei der Einrichtung und im Admin-Bereich','Prognose auf der Übersicht: Wahrscheinlichkeit, dass das Budget bis Monatsende reicht – berechnet aus den noch geplanten Einkäufen und den bisherigen Einkaufsbeträgen','Kauft ihr öfter ein als geplant, wird das in der Prognose automatisch berücksichtigt'],
   soon: ['Budget je Kategorie','Monatsbericht als PDF']
 };
 
@@ -438,6 +441,97 @@ const unitOf = it => it.unit === 'kg' ? 'kg' : 'Stk';
 const qtyInput = it => String(qtyOf(it)).replace('.', ',');
 const qtyLabel = it => unitOf(it) === 'kg' ? qtyOf(it).toLocaleString('de-DE', {maximumFractionDigits: 3}) + ' kg' : qtyOf(it) + '×';
 
+/* ============ Einkaufsrhythmus & Prognose ============ */
+const WD = ['So','Mo','Di','Mi','Do','Fr','Sa'], WD_ORDER = [1,2,3,4,5,6,0];
+const WD_LONG = ['sonntags','montags','dienstags','mittwochs','donnerstags','freitags','samstags'];
+const sched = () => S.settings.schedule || {mode:'days', days:[1]};
+function schedText(sc){
+  sc = sc || sched();
+  if (sc.mode === 'count') return `${sc.n || 0}× im Monat`;
+  const d = WD_ORDER.filter(x => (sc.days || []).includes(x));
+  if (!d.length) return 'kein fester Tag';
+  return d.length === 1 ? 'immer ' + WD_LONG[d[0]] : d.map(x => WD[x]).join(', ');
+}
+const isoOf = (y, m0, d) => `${y}-${String(m0 + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+function isoDaysAgo(n){ const d = new Date(); d.setDate(d.getDate() - n); return isoOf(d.getFullYear(), d.getMonth(), d.getDate()); }
+// geplante Einkaufstage zwischen from und to (inklusive)
+function plannedBetween(from, to){
+  const sc = sched(), out = [];
+  const d = new Date(+from.slice(0,4), +from.slice(5,7) - 1, +from.slice(8,10));
+  for (let k = 0; k < 800; k++){
+    const iso = isoOf(d.getFullYear(), d.getMonth(), d.getDate()); if (iso > to) break;
+    if (sc.mode === 'count'){
+      const dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(), n = Math.max(0, sc.n || 0);
+      for (let j = 0; j < n; j++) if (Math.min(dim, Math.max(1, Math.round((j + 0.5) * dim / n))) === d.getDate()){ out.push(iso); break; }
+    } else if ((sc.days || []).includes(d.getDay())) out.push(iso);
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+function tripStats(){
+  const today = todayISO(), lim = isoDaysAgo(120), byDate = {};
+  live().forEach(r => { if (r.date >= lim && r.date <= today) byDate[r.date] = (byDate[r.date] || 0) + rTotal(r); });
+  const dates = Object.keys(byDate).sort(), v = dates.map(d => byDate[d]).filter(x => x > 0);
+  const n = v.length; if (!n) return {n: 0};
+  const mu = v.reduce((a, b) => a + b, 0) / n;
+  const sd = n >= 3 ? Math.sqrt(v.reduce((a, b) => a + (b - mu) ** 2, 0) / (n - 1)) : mu * 0.35;
+  // kauft ihr öfter/seltener ein als geplant?
+  let factor = 1; const planned = plannedBetween(dates[0], today).length;
+  const spanDays = (new Date(today) - new Date(dates[0])) / 864e5;
+  if (spanDays >= 21 && planned >= 3) factor = Math.min(3, Math.max(0.5, n / planned));
+  return {n, mu, sd: Math.max(sd, mu * 0.1), factor};
+}
+function normCdf(z){ const t = 1 / (1 + 0.3275911 * Math.abs(z) / Math.SQRT2); const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-z * z / 2); return z >= 0 ? (1 + y) / 2 : (1 - y) / 2; }
+function forecast(m){
+  const cur = monthKey(), today = todayISO();
+  if (m < cur) return null;
+  const [y, mo] = m.split('-').map(Number); const end = isoOf(y, mo - 1, new Date(y, mo, 0).getDate());
+  let dates = plannedBetween(m === cur ? today : m + '-01', end);
+  if (m === cur && dates[0] === today && ofMonth(m).some(r => r.date === today)) dates = dates.slice(1);
+  const spent = r2(ofMonth(m).reduce((a, r) => a + rTotal(r), 0)), budget = budgetOf(m), left = budget - spent;
+  const st = tripStats();
+  const nExp = dates.length * (st.factor || 1);
+  const perTrip = nExp > 0 ? left / nExp : null;
+  if (st.n < 3) return {dates, spent, budget, left, perTrip, st, noData: true};
+  const mean = nExp * st.mu, sd = Math.sqrt(nExp) * st.sd;
+  const p = nExp <= 0 ? (left >= 0 ? 1 : 0) : normCdf((left - mean) / Math.max(sd, 0.01));
+  return {dates, spent, budget, left, perTrip, st, nExp, p, expected: spent + mean};
+}
+function viewForecast(){
+  const f = forecast(ui.month); if (!f) return '';
+  const nd = f.dates.length;
+  const dl = f.dates.slice(0, 5).map(d => WD[new Date(d).getDay()] + ' ' + d.slice(8, 10) + '.' + d.slice(5, 7) + '.').join(', ') + (nd > 5 ? ' …' : '');
+  const tip = f.perTrip != null ? (f.perTrip > 0 ? `Damit es reicht: <b>max. ${euro(f.perTrip)}</b> pro Einkauf${f.st.factor && Math.abs(f.st.factor - 1) > 0.15 ? ` <span class="muted">(bei ca. ${Math.round(f.nExp || nd * f.st.factor)} Einkäufen)</span>` : ''}` : `<b>Budget ist bereits aufgebraucht</b>`) : '';
+  const head = `<div class="spread"><h2 style="margin:0">Prognose bis Monatsende</h2><span class="small muted">${esc(schedText())}</span></div>`;
+  const plan = `<div class="small" style="margin-top:8px">Noch geplant: <b>${nd} Einkauf${nd === 1 ? '' : 'e'}</b>${nd ? ` <span class="muted">(${dl})</span>` : ''}</div>`;
+  if (f.noData) return `<div class="card">${head}${plan}${tip ? `<div class="small" style="margin-top:4px">${tip}</div>` : ''}
+    <p class="small muted" style="margin-bottom:0">Für die Wahrscheinlichkeit braucht die App mindestens 3 Einkaufstage als Erfahrungswert (bisher ${f.st.n || 0}).</p></div>`;
+  const pc = Math.round(f.p * 100), col = pc >= 80 ? 'var(--good)' : pc >= 50 ? 'var(--warn)' : 'var(--bad)';
+  const txt = pc >= 80 ? 'Das Budget reicht sehr wahrscheinlich.' : pc >= 50 ? 'Es wird knapp – etwas sparsamer einkaufen.' : 'Das Budget reicht wahrscheinlich nicht.';
+  return `<div class="card">${head}
+    <div class="row" style="gap:14px;margin-top:10px"><div class="money-big" style="color:${col};white-space:nowrap;flex:none">${f.p > 0 && pc === 0 ? '&lt;1' : f.p < 1 && pc === 100 ? '&gt;99' : pc} %</div><div class="small">Wahrscheinlichkeit, dass das Budget eingehalten wird<br><span class="muted">${txt}</span></div></div>
+    <div class="bar"><div style="width:${pc}%;background:${col}"></div></div>
+    ${plan}
+    <div class="small" style="margin-top:4px">Ø pro Einkaufstag: <b>${euro(f.st.mu)}</b> <span class="muted">(aus ${f.st.n} Einkaufstagen der letzten 4 Monate)</span></div>
+    <div class="small" style="margin-top:4px">Erwartet zum Monatsende: <b>${euro(f.expected)}</b> von ${euro(f.budget)}</div>
+    ${tip ? `<div class="small" style="margin-top:4px">${tip}</div>` : ''}
+    ${Math.abs(f.st.factor - 1) > 0.15 ? `<p class="small muted" style="margin-bottom:0">Ihr kauft etwa ${f.st.factor.toLocaleString('de-DE', {maximumFractionDigits: 1})}× so oft ein wie geplant – das ist in der Prognose berücksichtigt.</p>` : ''}</div>`;
+}
+function schedEditor(ctx){
+  const sc = ctx === 'admin' ? sched() : {mode: 'days', days: [1]};
+  const days = sc.mode === 'days' ? (sc.days || []) : [];
+  return `<div class="wdays" id="wd_${ctx}">${WD_ORDER.map(d => `<button type="button" class="${days.includes(d) ? 'on' : ''}" data-d="${d}" onclick="A.schedDay(this,'${ctx}')">${WD[d]}</button>`).join('')}</div>
+    <label class="f">oder: Anzahl Einkäufe pro Monat (wenn kein fester Tag)</label>
+    <input id="wn_${ctx}" inputmode="numeric" placeholder="z. B. 4" value="${sc.mode === 'count' ? sc.n : ''}" onchange="A.schedCount(this,'${ctx}')">`;
+}
+function readSched(ctx){
+  const days = [...document.querySelectorAll(`#wd_${ctx} button.on`)].map(b => +b.dataset.d);
+  const n = parseInt(($('#wn_' + ctx) || {}).value, 10);
+  if (days.length) return {mode: 'days', days};
+  if (n > 0) return {mode: 'count', n: Math.min(31, n)};
+  return {mode: 'days', days: [1]};
+}
+
 /* ============ Belegarchiv (IndexedDB) ============ */
 const Arch = {
   db: null,
@@ -526,6 +620,7 @@ function viewWelcome(){
     <label class="f">Name der Einrichtung / des Teams</label><input id="s_org" placeholder="z. B. Wohngruppe Sonnenhof">
     <label class="f">Dein Name</label><input id="s_name" placeholder="z. B. Markus">
     <label class="f">Monatsbudget (€)</label><input id="s_budget" inputmode="decimal" value="800,00">
+    <label class="f">Wann wird eingekauft? (Wochentage antippen)</label>${schedEditor('setup')}
     <label class="f">Admin-Passwort</label><input id="s_pw" type="password" autocomplete="new-password">
     <label class="f">Passwort wiederholen</label><input id="s_pw2" type="password" autocomplete="new-password">
     <div style="height:12px"></div><button class="block" onclick="A.setupAdmin()">Einrichten</button></div>
@@ -590,6 +685,7 @@ function viewDash(){
     ${extra}
     ${!isAdmin() && S.pkgDate ? `<div class="small muted" style="margin-top:6px">Stand vom Admin: ${new Date(S.pkgDate).toLocaleDateString('de-DE')} + deine neuen Einkäufe</div>` : ''}
   </div>
+  ${viewForecast()}
   <div class="card"><div class="spread"><h2 style="margin:0">Wofür am meisten?</h2>
     <div class="seg"><button class="${ui.chart==='cat'?'on':''}" onclick="A.chart('cat')">Kategorien</button><button class="${ui.chart==='grp'?'on':''}" onclick="A.chart('grp')">Bereiche</button></div></div>
     <div class="chart" style="margin-top:10px">${donut(parts, ptotal)}
@@ -702,6 +798,9 @@ function viewAdmin(){
     <label class="f">Abweichendes Budget nur für ${monthName(m)} (leer = Standard)</label>
     <div class="row"><input inputmode="decimal" value="${mb != null ? moneyInput(mb) : ''}" placeholder="${moneyInput(S.settings.budget)}" onchange="A.setMonthBudget(this.value)"></div>
     ${monthNav()}</div>
+  <div class="card"><h2>Einkaufsrhythmus</h2>
+    <p class="small muted" style="margin-top:0">Aktuell: <b>${esc(schedText())}</b>. Grundlage für die Prognose auf der Übersicht. Wird mit dem nächsten Paket an die Mitarbeitenden übertragen.</p>
+    ${schedEditor('admin')}</div>
 
   <div class="card"><h2>Mitarbeitende</h2>
     <div class="list">${S.users.map(u => `<div class="it" style="cursor:default"><div class="badge">${esc(u.name.slice(0, 2).toUpperCase())}</div>
@@ -1098,6 +1197,7 @@ const A = {
     if (pw !== pw2) return toast('Passwörter stimmen nicht überein');
     S.mode = 'admin'; S.org = org; S.admin = {name, hash: await hashPw(pw, 'admin')};
     S.settings.budget = parseMoney($('#s_budget').value) || 0;
+    S.settings.schedule = readSched('setup');
     save(); setSession({role:'admin'}); render(); this.whatsNew(); try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch(e){}
   },
   async login(){
@@ -1219,6 +1319,15 @@ const A = {
     save(); this.closeModal(); render(); toast('Gelöscht');
   },
 
+  schedDay(btn, ctx){
+    btn.classList.toggle('on'); const n = $('#wn_' + ctx);
+    if (btn.classList.contains('on') && n) n.value = '';
+    if (ctx === 'admin'){ S.settings.schedule = readSched('admin'); save(); render(); toast('Einkaufsrhythmus: ' + schedText()); }
+  },
+  schedCount(inp, ctx){
+    if (parseInt(inp.value, 10) > 0) document.querySelectorAll(`#wd_${ctx} button.on`).forEach(b => b.classList.remove('on'));
+    if (ctx === 'admin'){ S.settings.schedule = readSched('admin'); save(); render(); toast('Einkaufsrhythmus: ' + schedText()); }
+  },
   /* Admin */
   setBudget(v){ S.settings.budget = parseMoney(v); save(); render(); toast('Budget gespeichert'); },
   setMonthBudget(v){ if (String(v).trim()) S.settings.monthBudgets[ui.month] = parseMoney(v); else delete S.settings.monthBudgets[ui.month]; save(); render(); toast('Gespeichert'); },
