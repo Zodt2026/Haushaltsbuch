@@ -131,6 +131,10 @@ button.mini{background:var(--brand2);color:var(--brand);padding:3px 9px;font-siz
 .wdays{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
 .wdays button{background:var(--brand2);color:var(--ink);padding:11px 0;font-weight:600}
 .wdays button.on{background:var(--brand);color:#fff}
+.item button.brand{flex:1;min-width:0;text-align:left;justify-content:flex-start;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:7px 10px;font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item button.brand.empty{color:var(--muted)}
+.bpick{background:var(--brand2);color:var(--ink);border-radius:99px;padding:8px 14px;font-size:14px;font-weight:500}
+.bpick.on{background:var(--brand);color:#fff}
 </style>
 </head>
 <body>
@@ -144,11 +148,11 @@ button.mini{background:var(--brand2);color:var(--brand);padding:3px 9px;font-siz
 <script>
 "use strict";
 /* ============ Version & Neuigkeiten ============ */
-const VERSION = 'v 0.5';
+const VERSION = 'v 0.6';
 const WHATS_NEW = {
-  bugfix: ['Kategorie-Überschriften im Einkaufsdetail stehen wieder links'],
-  comfort: ['Empfehlung, wie viel pro Einkauf noch ausgegeben werden kann, damit das Budget reicht'],
-  neu: ['Einkaufsrhythmus festlegen: feste Wochentage (z. B. immer montags) oder Anzahl Einkäufe pro Monat – bei der Einrichtung und im Admin-Bereich','Prognose auf der Übersicht: Wahrscheinlichkeit, dass das Budget bis Monatsende reicht – berechnet aus den noch geplanten Einkäufen und den bisherigen Einkaufsbeträgen','Kauft ihr öfter ein als geplant, wird das in der Prognose automatisch berücksichtigt'],
+  bugfix: ['Absturz beim Korrigieren eines Belegs behoben: Die App braucht nach dem Einlesen deutlich weniger Arbeitsspeicher (Texterkennung wird danach freigegeben, kleinere Bildverarbeitung)','Die Markenliste unter dem Eingabefeld (Auslöser für Abstürze auf dem iPhone/iPad) wurde durch eine eigene Auswahl ersetzt'],
+  comfort: ['Sicherheitsnetz: Ein angefangener Einkauf wird laufend zwischengespeichert. Falls die App doch einmal neu lädt, geht es genau dort weiter – inklusive Belegbild'],
+  neu: ['Marke per Antippen wählen: Vorschläge passend zum Produkt (bisher verwendete Marken für diesen Artikel zuerst), dann Eigenmarken und alle bekannten Marken mit Suche','Neue Marke direkt im Auswahlfenster anlegen'],
   soon: ['Budget je Kategorie','Monatsbericht als PDF']
 };
 
@@ -578,6 +582,42 @@ function snippet(src, imgs, onclick){
   return `<div class="crop" ${onclick ? `onclick="${onclick}"` : ''} style="aspect-ratio:${ar.toFixed(4)};background-image:url('${im.url}');background-size:${(100 / sx).toFixed(3)}% auto;background-position:${px.toFixed(3)}% ${py.toFixed(3)}%"><div class="hl" style="left:${((x0 - rx0) / sx * 100).toFixed(2)}%;width:${((x1 - x0) / sx * 100).toFixed(2)}%;top:${((y0 - ry0) / sy * 100).toFixed(2)}%;height:${((y1 - y0) / sy * 100).toFixed(2)}%"></div></div>`;
 }
 
+
+/* ============ Marken-Vorschläge ============ */
+function brandSuggest(name, cat){
+  const w = {}, add = (b, x) => { if (b) w[b] = (w[b] || 0) + x; };
+  const pk = prodKey(name || '');
+  const l = S.dict[norm(name || '')]; if (l && l.b) add(l.b, 50);
+  if (pk) live().forEach(r => r.items.forEach(it => { if (it.brand && prodKey(it.name) === pk) add(it.brand, 10); }));
+  if (ui.draft) ui.draft.items.forEach(it => { if (it.brand && pk && prodKey(it.name) === pk) add(it.brand, 5); });
+  if (cat) live().forEach(r => r.items.forEach(it => { if (it.brand && it.cat === cat) add(it.brand, 1); }));
+  const d = detectBrand(name || '', ui.draft ? ui.draft.store : ''); if (d) add(d, 8);
+  return Object.entries(w).sort((a, b) => b[1] - a[1]).map(x => x[0]).filter(b => b !== BR_CHEAP && b !== BR_LUX).slice(0, 8);
+}
+
+/* ============ Entwurf sichern (Absturzschutz) ============ */
+const DRAFT_KEY = 'einkaufsbudget_draft';
+function draftSave(){
+  try {
+    const d = ui.draft;
+    if (!d || !session){ return; }
+    const copy = Object.assign({}, d, {images: undefined, owner: meId(), imgCount: (d.images || []).length, items: d.items.map(it => { const o = Object.assign({}, it); delete o._snip; return o; })});
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(copy));
+  } catch(e){}
+}
+function draftClear(){ try { localStorage.removeItem(DRAFT_KEY); } catch(e){} Arch.del('__draft__').catch(() => {}); delete imgCache['__draft__']; }
+function draftImgsSave(){ const d = ui.draft; if (!d) return; const imgs = d.images || []; if (imgs.length) Arch.put('__draft__', plainImgs(imgs)).then(() => { imgCache['__draft__'] = imgs; }).catch(() => {}); else Arch.del('__draft__').catch(() => {}); }
+async function draftRestore(){
+  let d = null; try { d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); } catch(e){}
+  if (!d || d.owner !== meId() || ui.draft) return false;
+  d.images = d.imgCount ? ((await loadImgs('__draft__')) || []).slice() : [];
+  if (d.step === 2) d.step = d.items && d.items.length ? 3 : 2;
+  delete d.owner; delete d.imgCount;
+  ui.draft = d; ui.tab = 'buy'; render();
+  toast('Nicht gespeicherter Einkauf wiederhergestellt');
+  return true;
+}
+
 /* ============ UI-Zustand ============ */
 const ui = {pq:'', pcat:'', pbrand:'', psort:'recent', tab:'dash', month:monthKey(), chart:'cat', draft:null, ocr:null, dictQ:'', detail:null};
 
@@ -588,6 +628,7 @@ function modal(html){ $('#modal').innerHTML = `<div class="bg" onclick="if(event
 
 /* ============ Rendering ============ */
 function render(){
+  if (ui.draft) draftSave();
   const app = $('#app');
   if (!S.mode){ app.innerHTML = viewWelcome(); return; }
   if (!session){ app.innerHTML = viewLogin(); setTimeout(() => { const p = $('#pw'); p && p.focus(); }, 50); return; }
@@ -752,7 +793,7 @@ function viewBuy(){
       <div class="r2"><input class="qty" inputmode="decimal" value="${qtyInput(it)}" aria-label="Menge" title="Menge" onchange="A.setItem(${i},'qty',this.value)">
         <select class="unit" onchange="A.setItem(${i},'unit',this.value)"><option ${unitOf(it)==='Stk'?'selected':''}>Stk</option><option ${unitOf(it)==='kg'?'selected':''}>kg</option></select>
         ${catSelect(it.cat, `A.setItem(${i},'cat',this.value)`, 'cat')}</div>
-      <div class="r2"><input class="brand" list="brandList" placeholder="Marke / Eigenmarke" value="${esc(it.brand || '')}" onchange="A.setItem(${i},'brand',this.value)">
+      <div class="r2"><button type="button" class="brand ${it.brand ? '' : 'empty'}" onclick="A.pickBrand(${i})">${it.brand ? esc(it.brand) : 'Marke wählen …'}</button>
         <input class="qty" inputmode="decimal" placeholder="Inhalt" aria-label="Packungsgröße" value="${it.size && it.size.v > 0 ? String(it.size.v).replace('.', ',') : ''}" onchange="A.setItem(${i},'sizev',this.value)">
         <select class="unit" aria-label="Einheit der Packungsgröße" onchange="A.setItem(${i},'sizeu',this.value)">${sizeUnits.map(u => `<option value="${u}" ${(it.size ? it.size.u : '') === u ? 'selected' : ''}>${u || '–'}</option>`).join('')}</select></div>
       <div class="up"><span>${info.join(' · ')}</span>${hasSrc ? `<button class="mini" onclick="A.toggleSnip(${i})">🧾 ${it._snip ? 'ausblenden' : 'Beleg'}</button>` : ''}</div>
@@ -762,7 +803,6 @@ function viewBuy(){
   return `${steps}<div class="card"><div class="spread"><h2 style="margin:0">3 · Artikel prüfen</h2><span class="small muted">${esc(d.store)} · ${dateDE(d.date)}</span></div>
     <p class="small muted" style="margin:6px 0 0">Preis = Gesamtpreis der Zeile. Darunter: Menge, Kategorie, Marke und Packungsgröße (für den Kilo-/Literpreis). Mit <b>🧾 Beleg</b> siehst du die Stelle auf dem Kassenbon. Korrekturen merkt sich die App.</p>
     ${imgs.length ? `<button class="sec block" style="margin-top:10px" onclick="A.fullBeleg('draft')">🧾 Ganzen Beleg ansehen (${imgs.length} ${imgs.length === 1 ? 'Bild' : 'Bilder'})</button>` : ''}
-    <datalist id="brandList"><option value="${BR_CHEAP}"><option value="${BR_LUX}">${knownBrands().map(b => `<option value="${esc(b)}">`).join('')}</datalist>
     <div id="items">${d.items.map(itemHtml).join('') || '<p class="muted small">Noch keine Artikel.</p>'}</div>
     <div class="row wrap" style="margin-top:10px"><button class="sec" onclick="A.addItem()">+ Artikel</button><button class="sec" onclick="A.addItem('pfand')">+ Pfand</button><button class="sec" onclick="$('#fileImg').click()">+ Foto</button><button class="sec" onclick="$('#filePdf').click()">+ PDF</button></div>
     <h4 style="margin:18px 0 4px">Rabatte auf den ganzen Bon</h4>
@@ -1025,6 +1065,7 @@ function loadTess(){
   });
   return tessPromise;
 }
+async function freeWorker(){ const w = worker; worker = null; if (w){ try { await w.terminate(); } catch(e){} } }
 async function getWorker(){
   await loadTess();
   if (!worker){
@@ -1036,8 +1077,8 @@ async function getWorker(){
 function loadImg(url){ return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Bild konnte nicht gelesen werden.')); i.src = url; }); }
 function prepImage(img){
   let w = img.naturalWidth, h = img.naturalHeight;
-  let sc = w > 1800 ? 1800 / w : (w < 1000 ? 1000 / w : 1);
-  if (w * sc * h * sc > 14e6) sc = Math.sqrt(14e6 / (w * h));
+  let sc = w > 1500 ? 1500 / w : (w < 1000 ? 1000 / w : 1);
+  if (w * sc * h * sc > 7e6) sc = Math.sqrt(7e6 / (w * h));
   const cv = document.createElement('canvas'); cv.width = Math.round(w * sc); cv.height = Math.round(h * sc);
   const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0, cv.width, cv.height);
   return enhance(cv);
@@ -1130,11 +1171,12 @@ async function readPdf(file, setStatus, baseIdx){
   const w = await getWorker(); lines = [];
   for (let i = 1; i <= n; i++){
     setStatus(`Lese Seite ${i} von ${n} …`, .1 + .9 * (i - 1) / n);
-    const cv = await renderPage(await pdf.getPage(i), 1700);
+    const cv = await renderPage(await pdf.getPage(i), 1500);
     images.push(archiveFrom(cv, cv.width, cv.height));
     if (i === 1 && ui.ocr){ ui.ocr.url = images[0].data; render(); }
     const {data} = await w.recognize(enhance(cv));
     lines = lines.concat(tessLines(data, cv.width, cv.height, baseIdx + i - 1));
+    cv.width = cv.height = 0;
   }
   return {lines, images};
 }
@@ -1161,7 +1203,10 @@ async function runOcr(file){
       setStatus('Lese Kassenzettel …', .3);
       const {data} = await w.recognize(cv);
       lines = tessLines(data, cv.width, cv.height, baseIdx);
+      cv.width = cv.height = 0;
     }
+    await freeWorker();
+    if (url) URL.revokeObjectURL(url);
     images.forEach((im, k) => { im.tb = textBounds(lines, baseIdx + k); });
     d.images = d.images.concat(images.map(withUrl));
     const res = parseReceipt(lines, d.store);
@@ -1170,10 +1215,11 @@ async function runOcr(file){
     if (res.bonTotal != null) d.bonTotal = res.bonTotal;
     const text = lines.map(l => l.t).join('\n');
     d.ocrText = (append && d.ocrText ? d.ocrText + '\n— — —\n' : '') + text;
-    d.step = 3; ui.ocr = null; render();
+    d.step = 3; ui.ocr = null; draftImgsSave(); render();
     const pf = res.items.filter(x => x.cat === 'pfand').length;
     toast(res.items.length ? `${res.items.length} Artikel erkannt${pf ? ` (davon ${pf}× Pfand)` : ''}${res.discounts.length ? ` + ${res.discounts.length} Rabatt` : ''} – bitte prüfen` : 'Keine Artikel erkannt – bitte manuell ergänzen');
   } catch(e){
+    freeWorker();
     ui.ocr.error = (e && e.name === 'PasswordException') ? 'Das PDF ist passwortgeschützt.' : (e.message || String(e)); ui.ocr.status = 'Fehler'; render();
   }
 }
@@ -1204,7 +1250,7 @@ const A = {
     const pw = $('#pw').value;
     const ok = isAdmin() ? (await hashPw(pw, 'admin')) === S.admin.hash : S.me && (await hashPw(pw, S.me.id)) === S.me.hash;
     if (!ok){ toast('Passwort falsch'); $('#pw').value = ''; return; }
-    setSession({role: S.mode}); ui.tab = 'dash'; render(); try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch(e){}
+    setSession({role: S.mode}); ui.tab = 'dash'; render(); draftRestore(); try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch(e){}
     if (S.seenVersion !== VERSION) this.whatsNew();
   },
   logout(){ setSession(null); ui.draft = null; render(); },
@@ -1237,13 +1283,35 @@ const A = {
     render(); const ins = document.querySelectorAll(pf ? '#items .price' : '#items .name'); ins.length && ins[ins.length - 1].focus();
   },
   delItem(i){ ui.draft.items.splice(i, 1); render(); },
+  pickBrand(i){
+    const it = ui.draft.items[i]; if (!it) return; ui.brandIdx = i;
+    const sug = brandSuggest(it.name, it.cat);
+    const all = knownBrands().filter(b => !sug.includes(b));
+    const chip = b => `<button class="bpick ${it.brand === b ? 'on' : ''}" data-b="${esc(b)}" onclick="A.setBrand(this.dataset.b)">${esc(b)}</button>`;
+    modal(`<h3>Marke für „${esc(it.name || 'Artikel')}“</h3>
+      ${sug.length ? `<h4>Vorschläge für dieses Produkt</h4><div class="chips">${sug.map(chip).join('')}</div>` : ''}
+      <h4>Eigenmarke</h4><div class="chips">${chip(BR_CHEAP)}${chip(BR_LUX)}</div>
+      <h4>Alle Marken</h4>
+      <input id="bq" placeholder="Marke suchen oder neu eingeben …" autocomplete="off" oninput="A.filterBrands(this.value)">
+      <button id="bnew" class="sec block" style="margin-top:8px;display:none" onclick="A.setBrand(document.getElementById('bq').value.trim())"></button>
+      <div class="chips" id="ball" style="margin-top:8px">${all.map(chip).join('')}</div>
+      <div style="height:12px"></div>
+      <div class="row">${it.brand ? `<button class="ghost" style="color:var(--bad)" onclick="A.setBrand('')">Marke entfernen</button>` : ''}<span style="flex:1"></span><button class="ghost" onclick="A.closeModal()">Abbrechen</button></div>`);
+  },
+  filterBrands(v){
+    const q = norm(v); let exact = false;
+    document.querySelectorAll('#ball .bpick').forEach(b => { const k = norm(b.dataset.b); b.style.display = !q || k.includes(q) ? '' : 'none'; if (k === q) exact = true; });
+    document.querySelectorAll('.bpick').forEach(b => { if (norm(b.dataset.b) === q) exact = true; });
+    const nb = document.getElementById('bnew'); nb.style.display = v.trim() && !exact ? '' : 'none'; nb.textContent = `„${v.trim()}“ als neue Marke übernehmen`;
+  },
+  setBrand(b){ const it = ui.draft && ui.draft.items[ui.brandIdx]; if (!it) return this.closeModal(); it.brand = String(b || '').trim(); this.closeModal(); render(); },
   toggleSnip(i){ const it = ui.draft.items[i]; it._snip = !it._snip; render(); },
   addDisc(){ ui.draft.discounts.push({name: 'Mitarbeiterrabatt', amount: 0}); render(); const ins = document.querySelectorAll('.drow .price'); ins.length && ins[ins.length - 1].focus(); },
   setDisc(j, k, v){ const x = ui.draft.discounts[j]; if (!x) return; if (k === 'amount') x.amount = -Math.abs(parseMoney(v)); else x.name = String(v).trim() || 'Rabatt'; render(); },
   delDisc(j){ ui.draft.discounts.splice(j, 1); render(); },
   bonTotal(v){ ui.draft.bonTotal = String(v).trim() ? parseMoney(v) : null; render(); },
   fixDiff(){ const d = ui.draft; const sum = d.items.reduce((a, it) => a + (+it.price || 0), 0) + (d.discounts || []).reduce((a, x) => a + (+x.amount || 0), 0); d.items.push({name:'Ausgleich (nicht erkannt)', price:r2(d.bonTotal - sum), cat:'sonstiges', manual:true, qty:1, unit:'Stk', brand:'', size:null}); render(); },
-  cancelDraft(){ if (confirm('Einkauf verwerfen?')){ ui.draft = null; ui.ocr = null; ui.tab = 'dash'; render(); } },
+  cancelDraft(){ if (confirm('Einkauf verwerfen?')){ ui.draft = null; ui.ocr = null; draftClear(); ui.tab = 'dash'; render(); } },
   async saveDraft(){
     const d = ui.draft, now = Date.now();
     const items = d.items.filter(it => it.name.trim() || it.price).map(it => {
@@ -1269,7 +1337,7 @@ const A = {
       try { await Arch.put(r.id, plainImgs(imgs)); r.hasImg = imgs.length; imgCache[r.id] = imgs; }
       catch(e){ toast('Beleg konnte nicht archiviert werden (Speicher?)'); }
     }
-    save(); ui.month = monthKey(d.date); ui.draft = null; ui.tab = 'dash'; render(); window.scrollTo(0, 0);
+    save(); ui.month = monthKey(d.date); ui.draft = null; draftClear(); ui.tab = 'dash'; render(); window.scrollTo(0, 0);
     toast('Einkauf gespeichert' + (imgs.length ? ' – Beleg archiviert' : '') + (!isAdmin() ? ' · denk ans Senden unter „Daten“' : ''));
   },
   async fullBeleg(rid, which){
@@ -1310,7 +1378,7 @@ const A = {
     const r = S.receipts.find(x => x.id === id);
     const imgs = r.hasImg ? (await loadImgs(id)) || [] : [];
     ui.draft = {id: r.id, step: 3, store: r.store, date: r.date, items: r.items.map(it => Object.assign({manual: true, brand: '', size: null}, JSON.parse(JSON.stringify(it)))), discounts: (r.discounts || []).map(x => Object.assign({}, x)), images: imgs.slice(), bonTotal: r.bonTotal ?? null, ocrText: ''};
-    this.tab('buy');
+    draftImgsSave(); this.tab('buy');
   },
   del(id){
     if (!confirm('Diesen Einkauf löschen? Der archivierte Beleg wird ebenfalls gelöscht.')) return;
@@ -1429,7 +1497,7 @@ const A = {
 };
 window.A = A; window.ui = ui;
 render();
-if (session && S.seenVersion !== VERSION) A.whatsNew();
+if (session){ draftRestore(); if (S.seenVersion !== VERSION) A.whatsNew(); }
 </script>
 </body>
 </html>
