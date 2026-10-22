@@ -140,6 +140,12 @@ button.mini{background:var(--brand2);color:var(--brand);padding:3px 9px;font-siz
 .bpick.freq{background:#fff3cd;font-weight:700}
 @media (prefers-color-scheme:dark){.bpick.freq{background:#3a3214}}
 .bpick.on .cnt,.bpick.on .tier{color:var(--brand)}
+.unused{margin-top:14px;background:#fff8e6;border-radius:12px;padding:8px 12px}
+@media (prefers-color-scheme:dark){.unused{background:#2e2712}}
+.unused summary{color:var(--ink);font-size:14px;margin:0}
+.urow{display:flex;align-items:center;gap:6px;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+.urow .ut{flex:1;min-width:0}
+.urow .del{background:transparent;color:var(--muted);padding:0 4px;font-size:20px}
 </style>
 </head>
 <body>
@@ -153,11 +159,11 @@ button.mini{background:var(--brand2);color:var(--brand);padding:3px 9px;font-siz
 <script>
 "use strict";
 /* ============ Version & Neuigkeiten ============ */
-const VERSION = 'v 0.6.1';
+const VERSION = 'v 0.6.2';
 const WHATS_NEW = {
-  bugfix: ['Kreisdiagramm: alle Kategorien werden einzeln angezeigt (kein Sammelposten „Weitere“ mehr)'],
-  comfort: ['Die App lernt je Artikel die Einheit: Waage-Artikel (kg) und die Packungseinheit (g, kg, ml, l) werden beim nächsten Bon automatisch gesetzt','Beim Eintragen einer Packungsgröße wird die passende Einheit vorgeschlagen (gelernt bzw. l bei Getränken)','Marken-Auswahl: häufig verwendete Marken sind hervorgehoben und stehen oben'],
-  neu: ['Eigenmarken je Geschäft mit Stufe günstig / Standard / Bio / Premium – z. B. Rewe: ja!, Rewe Beste Wahl, Rewe Bio, Rewe Feine Welt; ebenso Edeka, Kaufland, Lidl, Aldi, Penny, Netto, dm, Rossmann','Eigenmarken werden anhand des Geschäfts auf dem Bon erkannt','Preisvergleich vergleicht Eigenmarken derselben Stufe über alle Geschäfte (z. B. ja! mit Gut & Günstig und Milbona)','Admin: Eigenmarken je Geschäft ergänzen, ändern oder löschen'],
+  bugfix: ['Mehr Positionen werden erkannt: Störzeichen hinter dem Preis (z. B. „0,99 A yy“) oder ein als Ziffer gelesenes Steuerkennzeichen („1,794“) verhindern die Erkennung nicht mehr','Bons ohne „Summe“ (z. B. Aldi Süd mit „Betrag“) werden korrekt abgeschlossen, die Summe wird übernommen','Lesefehler in Preisen werden korrigiert (z. B. O statt 0, l statt 1)','Kategorien verbessert: Linsen-/Tortilla-Chips, Butterkekse, Toffifee, Kinder Ü-Ei u. a.'],
+  comfort: ['Artikelnamen ohne Artikelnummern und Zahlen davor, ohne „Stk“ dahinter','Gleiche Artikel auf einem Bon werden zusammengefasst (z. B. 3× Toffifee statt drei Zeilen)','Fotos werden für die Texterkennung in Schwarz-Weiß aufbereitet (gleicht Schatten und Knicke aus); bei Abweichung zur Bon-Summe liest die App automatisch ein zweites Mal mit anderer Einstellung'],
+  neu: ['Knopf „Bon scannen (beste Qualität)“ mit Anleitung für den Dokumentenscanner von iPhone/iPad','„Nicht erkannte Zeilen“ beim Prüfen: Zeilen, die nicht zugeordnet werden konnten, per Antippen als Artikel übernehmen'],
   soon: ['Budget je Kategorie','Monatsbericht als PDF']
 };
 
@@ -214,7 +220,7 @@ CATS.forEach(c => {
   c.kw.split(' ').filter(Boolean).forEach(w => { const n = norm(w); if (n && !seen.has(n)) { seen.add(n); KW.push({k:n.replace(/ /g,''), cat:c.id}); } });
 });
 // zusätzliche Mehrwort-Schlüssel
-[['h milch','milch'],['creme fraiche','milch'],['wc papier','papier'],['wc reiniger','reinigung'],['wc ente','reinigung'],['nuss nougat','fruehstueck'],['red bull','getraenke'],['ritter sport','suess'],['kinder schoko','suess'],['rote bete','obst'],['hafer drink','getraenke']]
+[['linsen chips','suess'],['tafel','suess'],['tafelwasser','getraenke'],['choceur','suess'],['chocr','suess'],['tortilla chips','suess'],['kinder ue ei','suess'],['ue ei','suess'],['butterk','suess'],['butterkeks','suess'],['toffifee','suess'],['kinder ue','suess'],['h milch','milch'],['creme fraiche','milch'],['wc papier','papier'],['wc reiniger','reinigung'],['wc ente','reinigung'],['nuss nougat','fruehstueck'],['red bull','getraenke'],['ritter sport','suess'],['kinder schoko','suess'],['rote bete','obst'],['hafer drink','getraenke']]
   .forEach(([w,c]) => KW.push({k:norm(w).replace(/ /g,''), cat:c}));
 
 function categorize(name){
@@ -247,11 +253,11 @@ function niceName(s){
 }
 
 /* ============ Bon-Erkennung (Text -> Artikel) ============ */
-const FINAL_RE = /(zu zahlen|zuzahlen|zahlbetrag|gesamtbetrag|endsumme|\btotal\b)/;
+const FINAL_RE = /(zu zahlen|zuzahlen|zahlbetrag|gesamtbetrag|endsumme|\btotal\b|(^|\s)[bp]?etrag\b)/;
 const SUB_RE = /(^|\s)(summe|gesamt)\b/;
-const PAY_RE = /(gegeben|\bgeg\b|\bbar\b|ec.?cash|girocard|kartenzahlung|visa|mastercard|maestro|kreditkarte|r[uü]ckgeld|wechselgeld|\bmwst|steuer|\bnetto\b|\bbrutto\b)/;
-const SKIP_RE = /(zwischensumme|gegeben|r[uü]ckgeld|wechselgeld|ec.?cash|girocard|kartenzahlung|visa|mastercard|maestro|kreditkarte|\bbar\b|\bmwst|\bust\b|steuer|\bnetto\b|\bbrutto\b|\bbetrag\b|bon.?nr|\bkasse\b|\btse\b|datum|uhrzeit|filiale|\btel\b|telefon|ust.?id|payback.?punkte|punktestand|anzahl artikel|posten|kundenbeleg|terminal|transaktion|signatur|seriennummer|www\.|danke|öffnungszeiten|oeffnungszeiten)/;
-const PRICE_RE = /(-)?\s?(\d{1,4})\s?[.,]\s?(\d{2})\s*(-)?((?:\s*(?:€|eur|EUR|Eur|[A-Za-z*#]{1,2}|\d)){0,3})\s*$/;
+const PAY_RE = /(bezahlung|gegeben|\bgeg\b|\bbar\b|ec.?cash|girocard|kartenzahlung|visa|mastercard|maestro|kreditkarte|r[uü]ckgeld|wechselgeld|\bmwst|steuer|\bnetto\b|\bbrutto\b)/;
+const SKIP_RE = /((k.?)?u.?n.?d.?e.?n.?b.?e.?l.?e.?g|bezahlung|zwischensumme|gegeben|r[uü]ckgeld|wechselgeld|ec.?cash|girocard|kartenzahlung|visa|mastercard|maestro|kreditkarte|\bbar\b|\bmwst|\bust\b|steuer|\bnetto\b|\bbrutto\b|\bbetrag\b|bon.?nr|\bkasse\b|\btse\b|datum|uhrzeit|filiale|\btel\b|telefon|ust.?id|payback.?punkte|punktestand|anzahl artikel|posten|kundenbeleg|terminal|transaktion|signatur|seriennummer|www\.|danke|öffnungszeiten|oeffnungszeiten)/;
+const PRICE_RE = /(-)?\s?(\d{1,4})\s?[.,]\s?(\d{2})\d?\s*(-)?((?:\s*(?:€|eur|EUR|Eur|[^\s\d]{1,3}|\d)){0,3})\s*$/;
 const PFAND_RE = /(pfand|leergut|einweg|mehrweg)/;
 const RDISC_RE = /(mitarbeiter|mitarb|\bma\b|ma.?rabatt|personal|belegschaft|angestellt)/;
 const DISC_WORD_RE = /(rabatt|nachlass|coupon|vorteil|gutschein|abzug)/;
@@ -279,7 +285,7 @@ const TIERS = {guenstig: 'günstig', standard: 'Standard', bio: 'Bio', premium: 
 const TIER_LABEL = {guenstig: 'Eigenmarke günstig', standard: 'Eigenmarke Standard', bio: 'Eigenmarke Bio', premium: 'Eigenmarke Premium/Luxus', marke: 'Markenprodukt'};
 const T = (b, t, ...k) => ({b, t, k: k.length ? k : [norm(b)]});
 const LIDL_STD = ['Milbona','Pilos','Chef Select','Solevita','Freeway','Crownfield','Combino','Alesto','Snack Day','Favorina','Dulano','Gelatelli','Kania','Vemondo','Cien','W5','Formil','Floralys'];
-const ALDI_STD = ['Milsani','Golden Seafood','Almare','Tandil','Ombia','Kokett','Sweet Valley','Choceur','Belbake','Cucina Nobile','Meine Metzgerei','Le Gusto','Rio d\'Oro','Lacura','Just Veg!','Gartenkrone'];
+const ALDI_STD = ['Milsani','Golden Seafood','Almare','Tandil','Ombia','Kokett','Sweet Valley','Belbake','Cucina Nobile','Meine Metzgerei','Le Gusto','Rio d\'Oro','Lacura','Just Veg!','Gartenkrone'];
 const DEFAULT_OWN = {
   'Rewe': [T('ja!','guenstig','ja'), T('Rewe Beste Wahl','standard','rewe beste wahl','beste wahl','rbw'), T('Rewe Bio','bio','rewe bio'), T('Rewe Feine Welt','premium','rewe feine welt','feine welt')],
   'Penny': [T('ja!','guenstig','ja'), T('Naturgut','bio'), T('Penny Ready','standard'), T('Food for Future','standard')],
@@ -287,7 +293,7 @@ const DEFAULT_OWN = {
   'Netto': [T('Gut & Günstig','guenstig','gut guenstig','gut und guenstig','g g'), T('BioBio','bio','biobio','bio bio')],
   'Kaufland': [T('K-Classic','guenstig','k classic','kclassic'), T('K-Purland','standard','k purland'), T('K-Take it Veggie','standard','k take it veggie','take it veggie'), T('K-Bio','bio','k bio'), T('K-Favourites','premium','k favourites','kfavourites')],
   'Lidl': LIDL_STD.map(b => T(b, 'guenstig')).concat([T('Bio Organic','bio'), T('Deluxe','premium')]),
-  'Aldi': ALDI_STD.map(b => T(b, 'guenstig')).concat([T('Gut Bio','bio'), T('Nur Nur Natur','bio'), T('Moser Roth','premium'), T('Gourmet','premium')]),
+  'Aldi': ALDI_STD.map(b => T(b, 'guenstig')).concat([T('Choceur','guenstig','choceur','chocr'), T('Gut Bio','bio'), T('Nur Nur Natur','bio'), T('Moser Roth','premium'), T('Gourmet','premium')]),
   'dm': ['Balea','Denkmit','Babylove','Alverde','Ebelin','Profissimo','Mivolis','Sundance'].map(b => T(b, 'guenstig')).concat([T('dmBio','bio','dmbio','dm bio')]),
   'Rossmann': ['Isana','Domol','Alouette','Babydream','Rival de Loop','Facelle','Sunozon','Altapharma'].map(b => T(b, 'guenstig')).concat([T('enerBiO','bio','enerbio')])
 };
@@ -359,30 +365,64 @@ function basePrice(it){
 }
 const sizeLabel = s => s && s.v > 0 ? String(s.v).replace('.', ',') + ' ' + (s.u === 'Stk' ? 'St.' : s.u) : '';
 
+const OCR_MAP = {O:'0',o:'0',Q:'0',D:'0',I:'1',l:'1','|':'1','!':'1',S:'5',s:'5',B:'8',Z:'2',g:'9'};
+function fixOcrLine(t){
+  t = t.replace(/([0-9OoQDIl|!SsBZ]{1,4})\s?([.,])\s?([0-9OoQDIl|!SsBZg]{2})(?=(?:\s*\S{0,3}){0,3}\s*$)/, (m, a, sep, b) => {
+    if ((a + b).replace(/\D/g, '').length < 2) return m;
+    return a.replace(/./g, c => OCR_MAP[c] || c) + ',' + b.replace(/./g, c => OCR_MAP[c] || c);
+  });
+  t = t.replace(/\s(\d)(\d{2})\s*([AB])\s*$/, ' $1,$2 $3');
+  t = t.replace(/(\d)[q¢]/g, '$1g');   // "099 A" -> "0,99 A"
+  return t;
+}
+function editDist(a, b){
+  if (Math.abs(a.length - b.length) > 1) return 2;
+  let prev = Array.from({length: b.length + 1}, (_, j) => j);
+  for (let i = 1; i <= a.length; i++){ const cur = [i]; for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j-1] + 1, prev[j-1] + (a[i-1] === b[j-1] ? 0 : 1)); prev = cur; }
+  return prev[b.length];
+}
+function cleanName(n){
+  return String(n || '')
+    .replace(/^[^A-Za-zÄÖÜäöü0-9]*(?:\S{0,3}\s+)?(?=\d{4,}\s)/, '')   // Störzeichen vor Artikelnummer
+    .replace(/^\d{1,2}\s*[x×*]\s+/, '')                              // "2 x " vorne
+    .replace(/^(?:[\d.,:;'*#\/-]+\s+)+/, '')                          // Zahlen vor dem Namen
+    .replace(/^[^A-Za-zÄÖÜäöü0-9]+/, '')
+    .replace(/\s+\d+([.,]\d{1,3})?\s*(kg|stk|st)?\.?\s*[x×*]\s*\d+[.,]\d{2}.*$/i, '')
+    .replace(/\s+\d+[.,]\d{2}\s*€?\s*[x×*]\s*\d{1,2}\s*$/, '')
+    .replace(/\s+[x×*]\s*\d+\s*$/, '')
+    .replace(/\s+\d+\s*(stk|st)\.?\s*$/i, '')
+    .replace(/\s+(stk|st|stück)\.?\s*$/i, '')
+    .replace(/[\s,;:.\-]+$/, '')
+    .trim();
+}
 function parseReceipt(src, store){
   const raw = Array.isArray(src) ? src : String(src || '').split(/\r?\n/).map(t => ({t}));
-  const lines = raw.map(l => ({t: String(l.t || '').replace(/[|_~»«]/g,' ').replace(/\s+/g,' ').trim(), s: l.b ? {i: l.i || 0, b: l.b} : null})).filter(l => l.t);
-  const items = [], discounts = []; let bonTotal = null, subTotal = null, after = false, pending = null, pendQty = null;
+  const lines = raw.map(l => ({t: fixOcrLine(String(l.t || '').replace(/[_~»«]/g,' ').replace(/\s+/g,' ').trim()).replace(/\|/g, ' ').replace(/\s+/g, ' ').trim(), s: l.b ? {i: l.i || 0, b: l.b} : null})).filter(l => l.t);
+  const items = [], discounts = [], used = new Set(), itemIdx = []; let payMode = false, payN = 0, bonTotal = null, subTotal = null, after = false, pending = null, pendQty = null, lastPO = null, stopIdx = lines.length;
   const lettersOf = str => str.replace(/\d+([.,]\d+)?/g,' ').replace(/\b(kg|g|stk|st|stück|x|eur|euro|l|ml)\b/gi,' ').replace(/[€\/*x×]/gi,' ').replace(/[^A-Za-zÄÖÜäöüß]/g,'').length;
   const priceOf = m => parseFloat(m[2] + '.' + m[3]);
   const mk = (name, price, cat, s) => ({name, price: r2(price), cat, qty: 1, unit: 'Stk', brand: '', size: null, src: s || null});
-  const attach = (q, s) => { const prev = items[items.length - 1]; if (prev && !prev._q && qtyFits(prev.price, q)){ prev.qty = q.qty; prev.unit = q.unit; prev._q = true; prev.src = mergeSrc(prev.src, s); return true; } return false; };
-  const addToPrev = (val, s) => { const p = items[items.length - 1]; if (!p) return false; p.price = r2(p.price + val); p.src = mergeSrc(p.src, s); return true; };
+  const attach = (q, s) => { const prev = items[items.length - 1]; if (prev && !prev._q && qtyFits(prev.price, q)){ used.add(curI); prev.qty = q.qty; prev.unit = q.unit; prev._q = true; prev.src = mergeSrc(prev.src, s); return true; } return false; };
+  const addToPrev = (val, s) => { const p = items[items.length - 1]; if (!p) return false; used.add(curI); p.price = r2(p.price + val); p.src = mergeSrc(p.src, s); return true; };
+  let curI = 0;
   for (let i = 0; i < lines.length; i++){
+    curI = i;
     const L = lines[i], line = L.t, low = line.toLowerCase();
     const nextPrice = () => lines[i+1] && /^[-\s\d.,€eurEUR*AB]+$/.test(lines[i+1].t) ? PRICE_RE.exec(lines[i+1].t) : null;
-    if (FINAL_RE.test(low)){ const m = PRICE_RE.exec(line) || nextPrice(); if (m) bonTotal = r2(priceOf(m)); break; }
-    if (SUB_RE.test(low) && !/zwischensumme/.test(low)){ const m = PRICE_RE.exec(line) || nextPrice(); if (m) subTotal = r2(priceOf(m)); after = true; pending = null; pendQty = null; continue; }
-    if (after && PAY_RE.test(low)) break;
-    if (SKIP_RE.test(low)){ pending = null; continue; }
+    if (FINAL_RE.test(low)){ const m = PRICE_RE.exec(line) || nextPrice(); if (m) bonTotal = r2(priceOf(m)); else if (lastPO && lastPO.i >= i - 2) bonTotal = lastPO.v; stopIdx = i; break; }
+    if (SUB_RE.test(low) && !/zwischensumme/.test(low)){ const m = PRICE_RE.exec(line) || nextPrice(); if (m) subTotal = r2(priceOf(m)); after = true; pending = null; pendQty = null; used.add(i); continue; }
+    if (after && PAY_RE.test(low)){ stopIdx = i; break; }
+    if (payMode){ const pm = PRICE_RE.exec(line); if (pm && !(pm[1] || pm[4])){ if (bonTotal == null) bonTotal = r2(priceOf(pm)); stopIdx = i; break; } if (++payN > 4){ stopIdx = i; break; } used.add(i); continue; }
+    if (!after && items.length && PAY_RE.test(low) && !/\d[.,]\d{2}/.test(line)){ payMode = true; used.add(i); continue; }
+    if (SKIP_RE.test(low)){ pending = null; used.add(i); continue; }
     const m = PRICE_RE.exec(line);
     if (!m){
       if (after) continue;
       const q = readQty(line);
-      if (q && lettersOf(line) < 4){ if (!attach(q, L.s)) pendQty = q; continue; }
+      if (q && lettersOf(line) < 4){ used.add(i); if (!attach(q, L.s)) pendQty = q; continue; }
       // Name ohne Preis (z. B. Waage-Artikel) – Preis steht evtl. in der nächsten Zeile
       const nm = line.replace(/\s*\d+([.,]\d+)?\s*kg\b.*$/i,'').trim();
-      pending = nm.replace(/[^A-Za-zÄÖÜäöüß]/g,'').length >= 3 ? {t: nm, s: L.s} : null;
+      pending = nm.replace(/[^A-Za-zÄÖÜäöüß]/g,'').length >= 3 ? {t: nm, s: L.s, i} : null;
       pendQty = pending ? q : null;
       continue;
     }
@@ -394,40 +434,35 @@ function parseReceipt(src, store){
     const isPf = PFAND_RE.test(lname0);
     const isRDisc = RDISC_RE.test(lname0) && (neg || DISC_WORD_RE.test(lname0));
     if (after){
+      used.add(i);
       if (isPf) items.push(mk(niceName(name) || 'Pfand', val, 'pfand', L.s));
       else if (neg || DISC_WORD_RE.test(lname0)) discounts.push({name: niceName(name) || 'Rabatt', amount: -Math.abs(r2(val)), src: L.s});
       continue;
     }
-    if (isRDisc){ discounts.push({name: niceName(name) || 'Mitarbeiterrabatt', amount: -Math.abs(r2(val)), src: L.s}); continue; }
+    if (isRDisc){ used.add(i); discounts.push({name: niceName(name) || 'Mitarbeiterrabatt', amount: -Math.abs(r2(val)), src: L.s}); continue; }
     if (isPf){ const pq = readQty(name) || (QTY_REV_RE.exec(name) ? {qty: +QTY_REV_RE.exec(name)[2], unit: 'Stk', up: parseFloat(QTY_REV_RE.exec(name)[1].replace(',', '.'))} : null);
-      const pit = mk(niceName(name.replace(/\s+\d+[.,]\d{2}\s*(€|eur)?\s*$/i,'').replace(/\s+\d+\s*[x×*]\s*\d+[.,]\d{2}.*$/,'').replace(/\s+\d+[.,]\d{2}\s*€?\s*[x×*]\s*\d+\s*$/,'')) || 'Pfand', val, 'pfand', L.s); if (qtyFits(val, pq)) pit.qty = pq.qty; items.push(pit); pending = null; pendQty = null; continue; }
+      const pit = mk(niceName(name.replace(/\s+\d+[.,]\d{2}\s*(€|eur)?\s*$/i,'').replace(/\s+\d+\s*[x×*]\s*\d+[.,]\d{2}.*$/,'').replace(/\s+\d+[.,]\d{2}\s*€?\s*[x×*]\s*\d+\s*$/,'')) || 'Pfand', val, 'pfand', L.s); if (qtyFits(val, pq)) pit.qty = pq.qty; items.push(pit); used.add(i); pending = null; pendQty = null; continue; }
     const letters = lettersOf(name);
     const lineQ = readQty(name) || readQty(line);
     // Zeile mit Einzel-/Kilopreis am Ende ("Tomaten 0,612 kg x 2,99 EUR") – Gesamtpreis folgt
     if (lineQ && !neg && lineQ.qty !== 1 && Math.abs(lineQ.up - val) < 0.005 && !qtyFits(val, lineQ)){
-      if (letters >= 3){ pending = {t: name.replace(/\s+\d+([.,]\d{1,3})?\s*(kg|stk|st)?\.?\s*[x×*]?\s*$/i,'').trim(), s: L.s}; pendQty = lineQ; }
-      else if (!attach(lineQ, L.s)) pendQty = lineQ;
+      if (letters >= 3){ pending = {t: name.replace(/\s+\d+([.,]\d{1,3})?\s*(kg|stk|st)?\.?\s*[x×*]?\s*$/i,'').trim(), s: L.s, i}; pendQty = lineQ; }
+      else { used.add(i); if (!attach(lineQ, L.s)) pendQty = lineQ; }
       continue;
     }
     const isInfo = /(\bkg\b|eur\s*\/|€\s*\/|\/\s*kg|\bstk\b|\d\s*[x×*]\s*\d)/i.test(name) || (lineQ && letters < 3);
     let lineQty = null, src = L.s;
     if (isInfo && letters < 4){
-      if (pending && !neg && (!lineQ || qtyFits(val, lineQ))){ name = pending.t; src = mergeSrc(pending.s, L.s); pending = null; lineQty = lineQ; pendQty = null; }
-      else { if (lineQ && !attach(lineQ, L.s)) pendQty = lineQ; continue; }
+      if (pending && !neg && (!lineQ || qtyFits(val, lineQ))){ name = pending.t; src = mergeSrc(pending.s, L.s); used.add(pending.i); pending = null; lineQty = lineQ; pendQty = null; }
+      else { if (lineQ){ used.add(i); if (!attach(lineQ, L.s)) pendQty = lineQ; } continue; }
     }
-    else if (letters < 3 && pending && !neg){ name = pending.t; src = mergeSrc(pending.s, L.s); pending = null; lineQty = pendQty; pendQty = null; }
-    else if (letters < 3){ if (neg) addToPrev(val, L.s); continue; }
+    else if (letters < 3 && pending && !neg){ name = pending.t; src = mergeSrc(pending.s, L.s); used.add(pending.i); pending = null; lineQty = pendQty; pendQty = null; }
+    else if (letters < 3){ if (neg) addToPrev(val, L.s); else { lastPO = {v: r2(val), i}; } continue; }
     // Menge in derselben Zeile: "Banane 2 x 0,89", "Banane 0,89 x 2", "2 x Joghurt"
     let q2 = lineQty ? null : readQty(name);
     if (!q2 && !lineQty){ const mr = QTY_REV_RE.exec(name); if (mr) q2 = {qty: +mr[2], unit: 'Stk', up: parseFloat(mr[1].replace(',', '.'))}; }
     if (!q2 && !lineQty){ const ml = /^(\d{1,2})\s*[x×*]\s+/.exec(name); if (ml && +ml[1] > 0) q2 = {qty: +ml[1], unit: 'Stk', up: val / +ml[1]}; }
-    name = name.replace(/^\d{4,}\s*/,'')
-               .replace(/^\d{1,2}\s*[x×*]\s+/,'')
-               .replace(/\s+\d+([.,]\d{1,3})?\s*(kg|stk|st)?\.?\s*[x×*]\s*\d+[.,]\d{2}.*$/i,'')
-               .replace(/\s+\d+[.,]\d{2}\s*€?\s*[x×*]\s*\d{1,2}\s*$/,'')
-               .replace(/\s+[x×*]\s*\d+\s*$/,'')
-               .replace(/\s+\d+\s*(stk|st)\.?\s*$/i,'')
-               .trim();
+    name = cleanName(name);
     if (neg){ if (addToPrev(val, L.s)) continue; }
     if (Math.abs(val) > 400) continue; // OCR-Unsinn
     const nn = niceName(name);
@@ -435,11 +470,35 @@ function parseReceipt(src, store){
     const q = [q2, lineQty, pendQty].find(x => qtyFits(val, x));
     if (q){ item.qty = q.qty; item.unit = q.unit; item._q = true; }
     pending = null; pendQty = null;
+    used.add(i); itemIdx.push(i);
     items.push(item);
   }
+  // gleiche Artikel zusammenfassen (z. B. 3× Toffifee)
+  const merged = [];
+  items.forEach(it => {
+    const up = it.price / (it.qty || 1);
+    const n1 = norm(it.name);
+    const m = it.cat !== 'pfand' && it.unit === 'Stk' && it.price > 0 && merged.find(x => { if (x.cat === 'pfand' || x.unit !== 'Stk' || Math.abs(x.price / x.qty - up) >= 0.005) return false; const n2 = norm(x.name); return n1 === n2 || (Math.min(n1.length, n2.length) >= 6 && editDist(n1, n2) <= 1); });
+    if (m){ m.qty += it.qty; m.price = r2(m.price + it.price); if (!detectSize(m.name) && detectSize(it.name)) m.name = it.name; }
+    else merged.push(it);
+  });
+  items.length = 0; merged.forEach(x => items.push(x));
   items.forEach(it => { delete it._q; enrichItem(it, store); });
+  // nicht zugeordnete Zeilen
+  const usedIdx = itemIdx;
+  const first = usedIdx.length ? Math.min(...usedIdx) : 0, last = usedIdx.length ? Math.max(...usedIdx) : -1;
+  const unused = [];
+  lines.forEach((l, i) => {
+    if (i >= stopIdx || used.has(i)) return;
+    const pm = PRICE_RE.exec(l.t);
+    const nm = cleanName(pm ? l.t.slice(0, pm.index) : l.t);
+    if (nm.replace(/[^A-Za-zÄÖÜäöüß]/g, '').length < 3) return;
+    if (!pm && !((i > first && i < last) || (i >= first - 1 && i <= last + 1 && /^\W*\d{6,}\s/.test(l.t)) || (i >= first - 3 && i <= last + 1 && /\s[AB]\b\W*$/.test(l.t)))) return;
+    if (pm && (pm[1] || pm[4]) && !PFAND_RE.test(nm.toLowerCase())) return;
+    unused.push({t: niceName(pm ? nm : (cleanName(nm.replace(/(\s+\S{1,3})+$/, '')) || nm)), price: pm ? r2(priceOf(pm)) : null, src: l.s});
+  });
   if (bonTotal == null) bonTotal = subTotal;
-  return {items, discounts, bonTotal};
+  return {items, discounts, bonTotal, unused};
 }
 
 /* ============ Speicher ============ */
@@ -816,8 +875,9 @@ function viewBuy(){
       ${o ? `${o.url ? `<img class="preview" src="${o.url}" alt="Kassenzettel">` : `<div class="center" style="font-size:44px;margin:14px 0">📄</div>`}
         <div class="small">${esc(o.status)}</div><div class="prog"><div style="width:${Math.round(o.p * 100)}%"></div></div>
         ${o.error ? `<div class="warnbox">${esc(o.error)}</div><div style="height:10px"></div><button class="sec block" onclick="A.manual()">Stattdessen manuell erfassen</button>` : ''}`
-      : `<p class="small muted">Leg den Bon flach auf einen dunklen Untergrund, gutes Licht, ganzer Bon im Bild. Lange Bons kannst du in zwei Fotos aufnehmen.</p>
-        <button class="block" onclick="$('#fileCam').click()">📷 Foto aufnehmen</button><div style="height:8px"></div>
+      : `<p class="small muted">Am zuverlässigsten ist ein Scan mit dem Dokumentenscanner von iPhone/iPad. Beim Foto: Bon flach auf dunklen Untergrund, gutes Licht, ganzer Bon im Bild, lange Bons in zwei Fotos.</p>
+        <button class="block" onclick="A.scanHelp()">📄 Bon scannen (beste Qualität)</button><div style="height:8px"></div>
+        <button class="sec block" onclick="$('#fileCam').click()">📷 Foto aufnehmen</button><div style="height:8px"></div>
         <button class="sec block" onclick="$('#fileImg').click()">Bild aus Fotos wählen</button><div style="height:8px"></div>
         <button class="sec block" onclick="$('#filePdf').click()">📄 PDF oder Datei wählen</button><div style="height:8px"></div>
         <button class="ghost block" onclick="A.manual()">Ohne Foto manuell erfassen</button>`}
@@ -856,6 +916,9 @@ function viewBuy(){
     ${imgs.length ? `<button class="sec block" style="margin-top:10px" onclick="A.fullBeleg('draft')">🧾 Ganzen Beleg ansehen (${imgs.length} ${imgs.length === 1 ? 'Bild' : 'Bilder'})</button>` : ''}
     <div id="items">${d.items.map(itemHtml).join('') || '<p class="muted small">Noch keine Artikel.</p>'}</div>
     <div class="row wrap" style="margin-top:10px"><button class="sec" onclick="A.addItem()">+ Artikel</button><button class="sec" onclick="A.addItem('pfand')">+ Pfand</button><button class="sec" onclick="$('#fileImg').click()">+ Foto</button><button class="sec" onclick="$('#filePdf').click()">+ PDF</button></div>
+    ${(d.unused || []).length ? `<details class="unused" open><summary><b>Nicht erkannte Zeilen (${d.unused.length})</b> – prüfen und ggf. übernehmen</summary>
+      ${d.unused.map((u, j) => `<div class="urow"><span class="ut">${esc(u.t)}${u.price != null ? ` · <b>${euro(u.price)}</b>` : ''}</span>
+        ${u.src && imgs[u.src.i] ? `<button class="mini" onclick="A.fullBeleg('draft','u${j}')">🧾</button>` : ''}<button class="mini" onclick="A.takeUnused(${j})">+ übernehmen</button><button class="del" onclick="A.dropUnused(${j})" aria-label="Verwerfen">×</button></div>`).join('')}</details>` : ''}
     <h4 style="margin:18px 0 4px">Rabatte auf den ganzen Bon</h4>
     <p class="small muted" style="margin:0 0 6px">z. B. Mitarbeiterrabatt, Coupon. Wird auf die Kategorien verteilt, die Artikelpreise für den Preisvergleich bleiben unverändert.</p>
     ${d.discounts.map((x, j) => `<div class="drow"><input value="${esc(x.name)}" onchange="A.setDisc(${j},'name',this.value)"><input class="price" inputmode="decimal" value="${moneyInput(x.amount)}" onchange="A.setDisc(${j},'amount',this.value)">
@@ -1135,25 +1198,58 @@ async function getWorker(){
   return worker;
 }
 function loadImg(url){ return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Bild konnte nicht gelesen werden.')); i.src = url; }); }
+// Foto aufbereiten: Bon zuschneiden (heller, ungesättigter Bereich) + adaptive Schwarz-Weiß-Umwandlung
 function prepImage(img){
   let w = img.naturalWidth, h = img.naturalHeight;
-  let sc = w > 1500 ? 1500 / w : (w < 1000 ? 1000 / w : 1);
-  if (w * sc * h * sc > 7e6) sc = Math.sqrt(7e6 / (w * h));
-  const cv = document.createElement('canvas'); cv.width = Math.round(w * sc); cv.height = Math.round(h * sc);
-  const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0, cv.width, cv.height);
-  return enhance(cv);
+  let sc = w > 1600 ? 1600 / w : (w < 1000 ? 1000 / w : 1);
+  if (w * sc * h * sc > 6e6) sc = Math.sqrt(6e6 / (w * h));
+  const W = Math.round(w * sc), H = Math.round(h * sc);
+  const full = document.createElement('canvas'); full.width = W; full.height = H;
+  const fx = full.getContext('2d'); fx.drawImage(img, 0, 0, W, H);
+  // Zuschnitt
+  let x0 = 0, y0 = 0, x1 = W, y1 = H;
+  try {
+    const d = fx.getImageData(0, 0, W, H).data, rows = new Uint32Array(H), cols = new Uint32Array(W);
+    for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2){ const k = (y * W + x) * 4, r = d[k], g = d[k+1], b = d[k+2];
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b); if (mx > 150 && mx - mn < 45){ rows[y]++; cols[x]++; } }
+    const ry = [], cx = [];
+    for (let y = 0; y < H; y += 2) if (rows[y] > W / 2 * 0.35) ry.push(y);
+    for (let x = 0; x < W; x += 2) if (cols[x] > H / 2 * 0.35) cx.push(x);
+    if (ry.length && cx.length){
+      const a0 = Math.max(0, cx[0] - 10), a1 = Math.min(W, cx[cx.length - 1] + 10), b0 = Math.max(0, ry[0] - 10), b1 = Math.min(H, ry[ry.length - 1] + 10);
+      const area = (a1 - a0) * (b1 - b0) / (W * H);
+      if (area > 0.2 && area < 0.92){ x0 = a0; x1 = a1; y0 = b0; y1 = b1; }
+    }
+  } catch(e){}
+  const color = document.createElement('canvas'); color.width = x1 - x0; color.height = y1 - y0;
+  color.getContext('2d').drawImage(full, x0, y0, x1 - x0, y1 - y0, 0, 0, x1 - x0, y1 - y0);
+  full.width = full.height = 0;
+  const cv = document.createElement('canvas'); cv.width = color.width; cv.height = color.height;
+  cv.getContext('2d').drawImage(color, 0, 0);
+  return {cv: binarize(cv), color};
 }
-function enhance(cv){
-  const cx = cv.getContext('2d');
-  const id = cx.getImageData(0, 0, cv.width, cv.height), d = id.data;
-  for (let i = 0; i < d.length; i += 4){
-    let g = d[i] * .299 + d[i+1] * .587 + d[i+2] * .114;
-    g = (g - 128) * 1.5 + 140; g = g < 0 ? 0 : g > 255 ? 255 : g;
-    d[i] = d[i+1] = d[i+2] = g;
+function binarize(cv){
+  const cx = cv.getContext('2d'), W = cv.width, H = cv.height;
+  const id = cx.getImageData(0, 0, W, H), d = id.data;
+  const g = new Uint8Array(W * H);
+  for (let i = 0, j = 0; j < g.length; i += 4, j++) g[j] = (d[i] * 77 + d[i+1] * 150 + d[i+2] * 29) >> 8;
+  const I = new Uint32Array((W + 1) * (H + 1));
+  for (let y = 1; y <= H; y++){ let row = 0; for (let x = 1; x <= W; x++){ row += g[(y - 1) * W + x - 1]; I[y * (W + 1) + x] = I[(y - 1) * (W + 1) + x] + row; } }
+  const s2 = Math.max(8, W >> 5), t = 0.85;
+  for (let y = 0; y < H; y++){
+    const ya = Math.max(0, y - s2), yb = Math.min(H, y + s2 + 1);
+    for (let x = 0; x < W; x++){
+      const xa = Math.max(0, x - s2), xb = Math.min(W, x + s2 + 1);
+      const cnt = (yb - ya) * (xb - xa);
+      const sum = I[yb * (W + 1) + xb] - I[ya * (W + 1) + xb] - I[yb * (W + 1) + xa] + I[ya * (W + 1) + xa];
+      const v = g[y * W + x] * cnt < sum * t ? 0 : 255, k = (y * W + x) * 4;
+      d[k] = d[k+1] = d[k+2] = v;
+    }
   }
   cx.putImageData(id, 0, 0);
   return cv;
 }
+const enhance = binarize;
 const OCR_STATUS = {'loading tesseract core':'Texterkennung wird geladen …','initializing tesseract':'Starte Texterkennung …','loading language traineddata':'Lade deutsches Wörterbuch (einmalig) …','initializing api':'Starte …','recognizing text':'Lese Kassenzettel …'};
 /* ---------- PDF ---------- */
 let pdfPromise = null;
@@ -1257,12 +1353,24 @@ async function runOcr(file){
     if (isPdf){ ({lines, images} = await readPdf(file, setStatus, baseIdx)); }
     else {
       const img = await loadImg(url);
-      const cv = prepImage(img);
-      images = [archiveFrom(img, img.naturalWidth, img.naturalHeight)];
+      const {cv, color} = prepImage(img);
+      images = [archiveFrom(color, color.width, color.height)]; color.width = color.height = 0;
       const w = await getWorker();
       setStatus('Lese Kassenzettel …', .3);
       const {data} = await w.recognize(cv);
       lines = tessLines(data, cv.width, cv.height, baseIdx);
+      // zweiter Durchgang mit anderer Seitenaufteilung, falls die Summe nicht passt
+      const score = r => { const sum = r.items.reduce((a, x) => a + x.price, 0) + r.discounts.reduce((a, x) => a + x.amount, 0); return (r.bonTotal != null && Math.abs(sum - r.bonTotal) < 0.02 ? 1000 : 0) + r.items.length; };
+      const r1 = parseReceipt(lines, d.store);
+      if (score(r1) < 1000){
+        setStatus('Zweiter Lesedurchgang für mehr Genauigkeit …', .75);
+        try {
+          await w.setParameters({tessedit_pageseg_mode: '4'});
+          const d2 = (await w.recognize(cv)).data;
+          const lines2 = tessLines(d2, cv.width, cv.height, baseIdx);
+          if (score(parseReceipt(lines2, d.store)) > score(r1)) lines = lines2;
+        } catch(e){}
+      }
       cv.width = cv.height = 0;
     }
     await freeWorker();
@@ -1272,6 +1380,7 @@ async function runOcr(file){
     const res = parseReceipt(lines, d.store);
     d.items = append ? d.items.concat(res.items) : res.items;
     d.discounts = (append ? (d.discounts || []) : []).concat(res.discounts);
+    d.unused = (append ? (d.unused || []) : []).concat(res.unused || []);
     if (res.bonTotal != null) d.bonTotal = res.bonTotal;
     const text = lines.map(l => l.t).join('\n');
     d.ocrText = (append && d.ocrText ? d.ocrText + '\n— — —\n' : '') + text;
@@ -1374,6 +1483,24 @@ const A = {
     const nb = document.getElementById('bnew'); nb.style.display = v.trim() && !exact ? '' : 'none'; nb.textContent = `„${v.trim()}“ als neue Marke übernehmen`;
   },
   setBrand(b){ const it = ui.draft && ui.draft.items[ui.brandIdx]; if (!it) return this.closeModal(); it.brand = String(b || '').trim(); this.closeModal(); render(); },
+  scanHelp(){
+    modal(`<h3>Bon scannen</h3>
+      <p class="small">Ein Scan wird gerade gerückt und kontrastreich – die Erkennung ist damit deutlich besser als beim Foto.</p>
+      <h4>iPhone / iPad – Dateien-App</h4>
+      <ol class="small"><li>Dateien-App öffnen, einen Ordner wählen (z. B. „Auf meinem iPhone“).</li><li>Oben rechts auf <b>⋯</b> tippen → <b>Dokumente scannen</b>.</li><li>Bon flach hinlegen – der Rand wird automatisch erkannt. Lange Bons in zwei Teilen scannen (ergibt ein PDF mit 2 Seiten).</li><li><b>Sichern</b> tippen.</li></ol>
+      <h4>Alternative – Notizen-App</h4>
+      <p class="small">Neue Notiz → Kamera-Symbol → <b>Dokumente scannen</b> → Scan öffnen → Teilen → <b>In Dateien sichern</b>.</p>
+      <h4>Dann hier</h4>
+      <button class="block" onclick="A.closeModal();$('#filePdf').click()">Scan (PDF) auswählen</button>
+      <div style="height:8px"></div><button class="ghost block" onclick="A.closeModal()">Schließen</button>`);
+  },
+  takeUnused(j){
+    const d = ui.draft, u = (d.unused || [])[j]; if (!u) return;
+    const it = {name: u.t, price: u.price || 0, cat: categorize(u.t), qty: 1, unit: 'Stk', brand: '', size: null, src: u.src || null};
+    enrichItem(it, d.store); d.items.push(it); d.unused.splice(j, 1); render();
+    toast(u.price != null ? 'Übernommen – bitte prüfen' : 'Übernommen – bitte Preis eintragen');
+  },
+  dropUnused(j){ ui.draft.unused.splice(j, 1); render(); },
   toggleSnip(i){ const it = ui.draft.items[i]; it._snip = !it._snip; render(); },
   addDisc(){ ui.draft.discounts.push({name: 'Mitarbeiterrabatt', amount: 0}); render(); const ins = document.querySelectorAll('.drow .price'); ins.length && ins[ins.length - 1].focus(); },
   setDisc(j, k, v){ const x = ui.draft.discounts[j]; if (!x) return; if (k === 'amount') x.amount = -Math.abs(parseMoney(v)); else x.name = String(v).trim() || 'Rabatt'; render(); },
@@ -1415,7 +1542,7 @@ const A = {
     else { const r = S.receipts.find(x => x.id === rid); imgs = await loadImgs(rid); items = r ? r.items : []; discs = r ? r.discounts || [] : []; }
     if (!imgs || !imgs.length) return toast('Kein Beleg archiviert');
     let src = null;
-    if (which){ const n = +which.slice(1); src = which[0] === 'd' ? (discs[n] || {}).src : (items[n] || {}).src; }
+    if (which){ const n = +which.slice(1); src = which[0] === 'd' ? (discs[n] || {}).src : which[0] === 'u' ? ((ui.draft && ui.draft.unused || [])[n] || {}).src : (items[n] || {}).src; }
     const back = rid !== 'draft' ? `<button class="sec block" onclick="A.detail('${rid}')">‹ Zurück zum Einkauf</button><div style="height:8px"></div>` : '';
     modal(`<h3>Beleg</h3>${imgs.map((im, k) => `<div class="beleg"><img src="${im.url}" alt="Beleg Seite ${k + 1}">${src && src.b && src.i === k ? `<div class="hl" id="hlFull" style="left:${src.b[0] * 100}%;top:${src.b[1] * 100}%;width:${(src.b[2] - src.b[0]) * 100}%;height:${(src.b[3] - src.b[1]) * 100}%"></div>` : ''}</div>`).join('')}
       ${back}<button class="ghost block" onclick="A.closeModal()">Schließen</button>`);
