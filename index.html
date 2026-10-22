@@ -146,6 +146,32 @@ button.mini{background:var(--brand2);color:var(--brand);padding:3px 9px;font-siz
 .urow{display:flex;align-items:center;gap:6px;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
 .urow .ut{flex:1;min-width:0}
 .urow .del{background:transparent;color:var(--muted);padding:0 4px;font-size:20px}
+#scanner{position:fixed;inset:0;background:#000;z-index:50;display:none;flex-direction:column;color:#fff}
+#scanner .ghost{color:#fff}
+.sc-top{display:flex;justify-content:space-between;align-items:center;padding:calc(8px + env(safe-area-inset-top)) 8px 8px;font-weight:600}
+.sc-view{flex:1;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-direction:column}
+.sc-view video{width:100%;height:100%;object-fit:contain;background:#000}
+.sc-frame{position:absolute;inset:6% 10% 14%;border:2px dashed rgba(255,255,255,.7);border-radius:10px;pointer-events:none}
+.sc-hint{position:absolute;bottom:10px;left:16px;right:16px;text-align:center;font-size:13px;background:rgba(0,0,0,.55);padding:6px 10px;border-radius:10px}
+.sc-bar{display:flex;justify-content:space-between;align-items:center;padding:12px 12px calc(14px + env(safe-area-inset-bottom))}
+.sc-shot{width:70px;height:70px;border-radius:50%;background:#fff;border:5px solid #888;padding:0}
+.sc-ok{background:var(--brand);color:#fff}
+.sc-edit{position:relative;max-width:100%;max-height:calc(100% - 50px);touch-action:none;user-select:none;-webkit-user-select:none}
+.sc-edit img{display:block;max-width:100%;max-height:calc(100vh - 210px);pointer-events:none}
+.sc-edit svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.sc-edit polygon{fill:rgba(31,111,92,.18);stroke:#3fe0b0;stroke-width:.006;vector-effect:non-scaling-stroke}
+.sc-h{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:3px solid #3fe0b0;background:rgba(255,255,255,.25);touch-action:none}
+.sc-h.on{background:rgba(63,224,176,.5)}
+.pinwrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px 0}
+.pinwrap h1{margin:0 0 4px;font-size:24px}
+.pindots{display:flex;gap:16px;margin:22px 0 26px}
+.pindots span{width:16px;height:16px;border-radius:50%;border:2px solid var(--brand)}
+.pindots span.on{background:var(--brand)}
+.pindots.shake{animation:shake .4s}
+@keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+.pinpad{display:grid;grid-template-columns:repeat(3,76px);gap:14px}
+.pinpad button{width:76px;height:76px;border-radius:50%;background:var(--card);color:var(--ink);border:1px solid var(--line);font-size:28px;font-weight:500;box-shadow:var(--shadow)}
+.pinpad button:active{background:var(--brand2)}
 </style>
 </head>
 <body>
@@ -159,11 +185,11 @@ button.mini{background:var(--brand2);color:var(--brand);padding:3px 9px;font-siz
 <script>
 "use strict";
 /* ============ Version & Neuigkeiten ============ */
-const VERSION = 'v 0.6.2';
+const VERSION = 'v 0.6.3';
 const WHATS_NEW = {
-  bugfix: ['Mehr Positionen werden erkannt: Störzeichen hinter dem Preis (z. B. „0,99 A yy“) oder ein als Ziffer gelesenes Steuerkennzeichen („1,794“) verhindern die Erkennung nicht mehr','Bons ohne „Summe“ (z. B. Aldi Süd mit „Betrag“) werden korrekt abgeschlossen, die Summe wird übernommen','Lesefehler in Preisen werden korrigiert (z. B. O statt 0, l statt 1)','Kategorien verbessert: Linsen-/Tortilla-Chips, Butterkekse, Toffifee, Kinder Ü-Ei u. a.'],
-  comfort: ['Artikelnamen ohne Artikelnummern und Zahlen davor, ohne „Stk“ dahinter','Gleiche Artikel auf einem Bon werden zusammengefasst (z. B. 3× Toffifee statt drei Zeilen)','Fotos werden für die Texterkennung in Schwarz-Weiß aufbereitet (gleicht Schatten und Knicke aus); bei Abweichung zur Bon-Summe liest die App automatisch ein zweites Mal mit anderer Einstellung'],
-  neu: ['Knopf „Bon scannen (beste Qualität)“ mit Anleitung für den Dokumentenscanner von iPhone/iPad','„Nicht erkannte Zeilen“ beim Prüfen: Zeilen, die nicht zugeordnet werden konnten, per Antippen als Artikel übernehmen'],
+  bugfix: [],
+  comfort: ['Anmeldung ohne Passwort: Das Passwort ist entfallen. Optional kann ein 4-stelliger Code vergeben werden, der mittig auf dem Bildschirm abgefragt wird','Ohne Code öffnet die App direkt die Übersicht'],
+  neu: ['Eigener Scanner direkt in der App: Kamera mit Rahmen, automatische Erkennung der Bonränder, Ecken mit dem Finger nachziehen, Bild wird gerade gerückt und für die Texterkennung aufbereitet','Auch Fotos aus der Mediathek laufen durch den Scanner','Lange Bons: weitere Teile mit „+ Teil scannen“ ergänzen','Admin: Code für sich und die Mitarbeitenden vergeben, ändern oder entfernen'],
   soon: ['Budget je Kategorie','Monatsbericht als PDF']
 };
 
@@ -504,12 +530,13 @@ function parseReceipt(src, store){
 /* ============ Speicher ============ */
 const KEY = 'einkaufsbudget_v1';
 function blank(){
-  return {v:1, mode:null, org:'', admin:{name:'Admin', hash:''}, me:null, users:[],
+  return {v:1, mode:null, org:'', admin:{name:'Admin', pin:''}, me:null, users:[],
     settings:{budget:800, monthBudgets:{}, stores:DEFAULT_STORES.slice()},
     receipts:[], dict:{}, alias:{}, pkgDate:null, lastExport:0, seenVersion:null};
 }
 let S;
 try { S = Object.assign(blank(), JSON.parse(localStorage.getItem(KEY) || 'null') || {}); } catch(e){ S = blank(); }
+if (!S.auth2){ S.admin = {name: (S.admin && S.admin.name) || 'Admin', pin: ''}; (S.users || []).forEach(u => { u.pin = ''; delete u.hash; }); if (S.me){ S.me.pin = ''; delete S.me.hash; } S.auth2 = true; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){} }
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){ toast('Speichern fehlgeschlagen – Speicher voll?'); } }
 
 let session = null;
@@ -741,7 +768,8 @@ function render(){
   if (ui.draft) draftSave();
   const app = $('#app');
   if (!S.mode){ app.innerHTML = viewWelcome(); return; }
-  if (!session){ app.innerHTML = viewLogin(); setTimeout(() => { const p = $('#pw'); p && p.focus(); }, 50); return; }
+  if (!session && !needPin()) setSession({role: S.mode});
+  if (!session){ app.innerHTML = viewLogin(); return; }
   const tabs = [['dash','⌂','Übersicht'],['buy','+','Einkauf'],['hist','☰','Verlauf'],['prices','↗','Preise'],[isAdmin() ? 'admin' : 'data', isAdmin() ? '⚙' : '⇅', isAdmin() ? 'Admin' : 'Daten']];
   let body = '';
   if (ui.tab === 'dash') body = viewDash();
@@ -772,20 +800,24 @@ function viewWelcome(){
     <label class="f">Dein Name</label><input id="s_name" placeholder="z. B. Markus">
     <label class="f">Monatsbudget (€)</label><input id="s_budget" inputmode="decimal" value="800,00">
     <label class="f">Wann wird eingekauft? (Wochentage antippen)</label>${schedEditor('setup')}
-    <label class="f">Admin-Passwort</label><input id="s_pw" type="password" autocomplete="new-password">
-    <label class="f">Passwort wiederholen</label><input id="s_pw2" type="password" autocomplete="new-password">
+    <label class="f">Code zum Öffnen (optional, 4 Ziffern)</label><input id="s_pw" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="leer = ohne Code">
+    <label class="f">Code wiederholen</label><input id="s_pw2" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password">
     <div style="height:12px"></div><button class="block" onclick="A.setupAdmin()">Einrichten</button></div>
   </div>`;
 }
 
+const needPin = () => isAdmin() ? !!(S.admin && S.admin.pin) : !!(S.me && S.me.pin);
 function viewLogin(){
-  const who = isAdmin() ? 'Admin-Anmeldung' : 'Hallo ' + esc(S.me ? S.me.name : '');
-  return `<div class="welcome"><h1>${esc(S.org || 'Einkaufsbudget')}</h1><p class="muted">${who}</p>
-  <div class="card"><label class="f">Passwort</label><input id="pw" type="password" onkeydown="if(event.key==='Enter')A.login()">
-  <div style="height:12px"></div><button class="block" onclick="A.login()">Anmelden</button></div>
-  <div class="center small">${isAdmin() ? '' : `<button class="ghost" onclick="A.pickJson('package')">Neues Paket importieren</button><br>`}
-  <button class="ghost" style="color:var(--muted)" onclick="A.resetDevice()">Gerät zurücksetzen</button></div></div>`;
+  const who = isAdmin() ? (S.admin.name || 'Admin') : (S.me ? S.me.name : '');
+  ui.pinBuf = ui.pinBuf || '';
+  const keys = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
+  return `<div class="pinwrap"><h1>${esc(S.org || 'Einkaufsbudget')}</h1><p class="muted">Hallo ${esc(who)} – bitte Code eingeben</p>
+    <div class="pindots" id="pindots">${[0,1,2,3].map(i => `<span class="${i < ui.pinBuf.length ? 'on' : ''}"></span>`).join('')}</div>
+    <div class="pinpad">${keys.map(k => k ? `<button onclick="A.pinKey('${k}')">${k}</button>` : '<span></span>').join('')}</div>
+    <div class="center small" style="margin-top:18px">${isAdmin() ? '' : `<button class="ghost" onclick="A.pickJson('package')">Neues Paket importieren</button><br>`}
+    <button class="ghost" style="color:var(--muted)" onclick="A.resetDevice()">Code vergessen / Gerät zurücksetzen</button></div></div>`;
 }
+document.addEventListener('keydown', e => { if (!S.mode || session) return; if (/^\d$/.test(e.key)) A.pinKey(e.key); else if (e.key === 'Backspace') A.pinKey('⌫'); });
 
 function donut(parts, total){
   const R = 70, C = 2 * Math.PI * R; let off = 0;
@@ -875,12 +907,12 @@ function viewBuy(){
       ${o ? `${o.url ? `<img class="preview" src="${o.url}" alt="Kassenzettel">` : `<div class="center" style="font-size:44px;margin:14px 0">📄</div>`}
         <div class="small">${esc(o.status)}</div><div class="prog"><div style="width:${Math.round(o.p * 100)}%"></div></div>
         ${o.error ? `<div class="warnbox">${esc(o.error)}</div><div style="height:10px"></div><button class="sec block" onclick="A.manual()">Stattdessen manuell erfassen</button>` : ''}`
-      : `<p class="small muted">Am zuverlässigsten ist ein Scan mit dem Dokumentenscanner von iPhone/iPad. Beim Foto: Bon flach auf dunklen Untergrund, gutes Licht, ganzer Bon im Bild, lange Bons in zwei Fotos.</p>
-        <button class="block" onclick="A.scanHelp()">📄 Bon scannen (beste Qualität)</button><div style="height:8px"></div>
-        <button class="sec block" onclick="$('#fileCam').click()">📷 Foto aufnehmen</button><div style="height:8px"></div>
-        <button class="sec block" onclick="$('#fileImg').click()">Bild aus Fotos wählen</button><div style="height:8px"></div>
+      : `<p class="small muted">Bon flach auf einen dunklen Untergrund legen, gutes Licht. Nach der Aufnahme die Ecken prüfen – das Bild wird automatisch gerade gerückt. Lange Bons in mehreren Teilen scannen.</p>
+        <button class="block" onclick="Scan.open()">📷 Bon scannen</button><div style="height:8px"></div>
+        <button class="sec block" onclick="ui.viaScan=true;$('#fileImg').click()">Bild aus Fotos wählen</button><div style="height:8px"></div>
         <button class="sec block" onclick="$('#filePdf').click()">📄 PDF oder Datei wählen</button><div style="height:8px"></div>
-        <button class="ghost block" onclick="A.manual()">Ohne Foto manuell erfassen</button>`}
+        <button class="ghost block" onclick="A.manual()">Ohne Foto manuell erfassen</button>
+        <button class="ghost block small" onclick="A.scanHelp()">Alternative: Scan mit der Dateien-App (Anleitung)</button>`}
       <div style="height:6px"></div><button class="ghost block" onclick="A.step(1)">‹ Zurück</button></div>`;
   }
   // Schritt 3: Prüfen
@@ -915,7 +947,7 @@ function viewBuy(){
     <p class="small muted" style="margin:6px 0 0">Preis = Gesamtpreis der Zeile. Darunter: Menge, Kategorie, Marke und Packungsgröße (für den Kilo-/Literpreis). Mit <b>🧾 Beleg</b> siehst du die Stelle auf dem Kassenbon. Korrekturen merkt sich die App.</p>
     ${imgs.length ? `<button class="sec block" style="margin-top:10px" onclick="A.fullBeleg('draft')">🧾 Ganzen Beleg ansehen (${imgs.length} ${imgs.length === 1 ? 'Bild' : 'Bilder'})</button>` : ''}
     <div id="items">${d.items.map(itemHtml).join('') || '<p class="muted small">Noch keine Artikel.</p>'}</div>
-    <div class="row wrap" style="margin-top:10px"><button class="sec" onclick="A.addItem()">+ Artikel</button><button class="sec" onclick="A.addItem('pfand')">+ Pfand</button><button class="sec" onclick="$('#fileImg').click()">+ Foto</button><button class="sec" onclick="$('#filePdf').click()">+ PDF</button></div>
+    <div class="row wrap" style="margin-top:10px"><button class="sec" onclick="A.addItem()">+ Artikel</button><button class="sec" onclick="A.addItem('pfand')">+ Pfand</button><button class="sec" onclick="Scan.open()">+ Teil scannen</button><button class="sec" onclick="$('#filePdf').click()">+ PDF</button></div>
     ${(d.unused || []).length ? `<details class="unused" open><summary><b>Nicht erkannte Zeilen (${d.unused.length})</b> – prüfen und ggf. übernehmen</summary>
       ${d.unused.map((u, j) => `<div class="urow"><span class="ut">${esc(u.t)}${u.price != null ? ` · <b>${euro(u.price)}</b>` : ''}</span>
         ${u.src && imgs[u.src.i] ? `<button class="mini" onclick="A.fullBeleg('draft','u${j}')">🧾</button>` : ''}<button class="mini" onclick="A.takeUnused(${j})">+ übernehmen</button><button class="del" onclick="A.dropUnused(${j})" aria-label="Verwerfen">×</button></div>`).join('')}</details>` : ''}
@@ -958,11 +990,11 @@ function viewAdmin(){
 
   <div class="card"><h2>Mitarbeitende</h2>
     <div class="list">${S.users.map(u => `<div class="it" style="cursor:default"><div class="badge">${esc(u.name.slice(0, 2).toUpperCase())}</div>
-      <div class="m"><div>${esc(u.name)}</div><div class="small muted">${live().filter(r => r.userId === u.id).length} Einkäufe</div></div>
+      <div class="m"><div>${esc(u.name)}</div><div class="small muted">${live().filter(r => r.userId === u.id).length} Einkäufe · ${u.pin ? 'mit Code' : 'ohne Code'}</div></div>
       <button class="sec small" onclick="A.makePackage('${u.id}')">Paket</button>
       <button class="ghost small" onclick="A.userMenu('${u.id}')">⋯</button></div>`).join('') || '<p class="small muted">Noch niemand angelegt.</p>'}</div>
     <label class="f">Neue Person</label><input id="nu_name" placeholder="Name">
-    <div style="height:6px"></div><input id="nu_pw" placeholder="Passwort für diese Person" autocomplete="off">
+    <div style="height:6px"></div><input id="nu_pw" placeholder="Code (optional, 4 Ziffern)" inputmode="numeric" maxlength="4" autocomplete="off">
     <div style="height:10px"></div><button class="block" onclick="A.addUser()">Anlegen &amp; Paket erstellen</button>
     <p class="small muted">Das Paket enthält Budget, Geschäfte, Wörterbuch und den aktuellen Stand der Einkäufe. Schick es der Person (z. B. per Mail/Messenger). Nach jedem Import ihrer Einkäufe kannst du ein neues Paket schicken, damit alle den aktuellen Stand sehen.</p></div>
 
@@ -997,8 +1029,8 @@ function viewAdmin(){
   <div class="card"><h2>Einstellungen</h2>
     <label class="f">Name der Einrichtung</label><input value="${esc(S.org)}" onchange="S.org=this.value.trim();save();render()">
     <label class="f">Dein Name</label><input value="${esc(S.admin.name)}" onchange="S.admin.name=this.value.trim()||'Admin';save();render()">
-    <div style="height:12px"></div><button class="sec block" onclick="A.adminPw()">Admin-Passwort ändern</button>
-    <div style="height:8px"></div><button class="ghost block" onclick="A.logout()">Abmelden</button></div>`;
+    <div style="height:12px"></div><button class="sec block" onclick="A.adminPw()">${S.admin.pin ? 'Code ändern / entfernen' : 'Code vergeben (optional)'}</button>
+    ${S.admin.pin ? `<div style="height:8px"></div><button class="ghost block" onclick="A.logout()">Sperren</button>` : ''}</div>`;
 }
 
 function viewData(){
@@ -1011,7 +1043,7 @@ function viewData(){
     <p class="small muted">Aktueller Stand: ${S.pkgDate ? new Date(S.pkgDate).toLocaleString('de-DE') : '–'}. Ein neues Paket bringt Budget, Kategorien und die Einkäufe aller auf den neuesten Stand. Deine eigenen Einkäufe bleiben erhalten.</p>
     <button class="sec block" onclick="A.pickJson('package')">Paket importieren</button></div>
   <div class="card"><h2>Konto</h2><p class="small">Angemeldet als <b>${esc(meName())}</b></p>
-    <button class="ghost block" onclick="A.logout()">Abmelden</button></div>`;
+    ${needPin() ? `<button class="ghost block" onclick="A.logout()">Sperren</button>` : ''}</div>`;
 }
 
 /* ============ Preise: Vergleich & Entwicklung ============ */
@@ -1147,10 +1179,10 @@ function importPackage(p){
   if (S.mode === 'admin'){ toast('Dieses Gerät ist als Admin eingerichtet – Paket nicht nötig.'); return; }
   if (S.me && S.me.id !== p.user.id && !confirm(`Dieses Gerät gehört ${S.me.name}. Auf ${p.user.name} umstellen?`)) return;
   if (S.me && S.me.id !== p.user.id){ S.receipts = []; S.lastExport = 0; }
-  S.mode = 'user'; S.me = p.user; S.org = p.org || ''; S.settings = Object.assign(blank().settings, p.settings || {});
+  S.mode = 'user'; S.me = {id: p.user.id, name: p.user.name, pin: p.user.pin || ''}; S.auth2 = true; S.org = p.org || ''; S.settings = Object.assign(blank().settings, p.settings || {});
   const res = mergeReceipts(p.receipts); mergeDict(p.dict); mergeAlias(p.alias); S.pkgDate = p.created || Date.now();
   save(); setSession(null); render();
-  toast(`Paket importiert (${res.added + res.updated} Einkäufe aktualisiert). Bitte anmelden.`);
+  toast(`Paket importiert (${res.added + res.updated} Einkäufe aktualisiert).`);
 }
 async function putImages(map){
   let n = 0;
@@ -1338,12 +1370,13 @@ async function readPdf(file, setStatus, baseIdx){
 }
 
 async function runOcr(file){
+  const scanCv = file instanceof HTMLCanvasElement ? file : null;
   const d = ui.draft;
   const append = d.step === 3;
   d.images = append ? (d.images || []) : [];
   const baseIdx = d.images.length;
-  const isPdf = /pdf/i.test(file.type) || /\.pdf$/i.test(file.name || '');
-  const url = isPdf ? '' : URL.createObjectURL(file);
+  const isPdf = !scanCv && (/pdf/i.test(file.type) || /\.pdf$/i.test(file.name || ''));
+  const url = isPdf ? '' : scanCv ? canvasFrom(scanCv, scanCv.width, scanCv.height, 700).toDataURL('image/jpeg', 0.6) : URL.createObjectURL(file);
   d.step = 2; ui.ocr = {url, status: isPdf ? 'PDF wird geladen …' : 'Bild wird vorbereitet …', p:0, error:null}; render();
   const upd = () => { if (ui.tab === 'buy' && ui.draft && ui.draft.step === 2){ const o = ui.ocr; const pr = document.querySelector('.prog div'); const st = document.querySelector('.prog') && document.querySelector('.prog').previousElementSibling; if (pr) pr.style.width = Math.round(o.p * 100) + '%'; if (st) st.textContent = o.status; } };
   const setStatus = (t, p) => { ui.ocr.status = t; ui.ocr.p = p; upd(); };
@@ -1352,8 +1385,9 @@ async function runOcr(file){
     let lines, images;
     if (isPdf){ ({lines, images} = await readPdf(file, setStatus, baseIdx)); }
     else {
-      const img = await loadImg(url);
-      const {cv, color} = prepImage(img);
+      let cv, color;
+      if (scanCv){ color = scanCv; cv = document.createElement('canvas'); cv.width = color.width; cv.height = color.height; cv.getContext('2d').drawImage(color, 0, 0); binarize(cv); }
+      else { const img = await loadImg(url); ({cv, color} = prepImage(img)); }
       images = [archiveFrom(color, color.width, color.height)]; color.width = color.height = 0;
       const w = await getWorker();
       setStatus('Lese Kassenzettel …', .3);
@@ -1374,7 +1408,7 @@ async function runOcr(file){
       cv.width = cv.height = 0;
     }
     await freeWorker();
-    if (url) URL.revokeObjectURL(url);
+    if (url && !scanCv) URL.revokeObjectURL(url);
     images.forEach((im, k) => { im.tb = textBounds(lines, baseIdx + k); });
     d.images = d.images.concat(images.map(withUrl));
     const res = parseReceipt(lines, d.store);
@@ -1392,7 +1426,150 @@ async function runOcr(file){
     ui.ocr.error = (e && e.name === 'PasswordException') ? 'Das PDF ist passwortgeschützt.' : (e.message || String(e)); ui.ocr.status = 'Fehler'; render();
   }
 }
-['#fileCam', '#fileImg', '#filePdf'].forEach(sel => $(sel).addEventListener('change', e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f && ui.draft) runOcr(f); }));
+['#fileCam', '#fileImg', '#filePdf'].forEach(sel => $(sel).addEventListener('change', e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; ui.viaScan = false; if (!f || !ui.draft) return; const pdf = /pdf/i.test(f.type) || /\.pdf$/i.test(f.name || ''); if (pdf) runOcr(f); else Scan.fromFile(f); }));
+
+/* ============ Eigener Scanner: Kamera → Ränder → gerade rücken ============ */
+function otsu(hist, total){
+  let sum = 0; for (let i = 0; i < 256; i++) sum += i * hist[i];
+  let sB = 0, wB = 0, best = 0, thr = 128;
+  for (let i = 0; i < 256; i++){ wB += hist[i]; if (!wB) continue; const wF = total - wB; if (!wF) break; sB += i * hist[i];
+    const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) ** 2; if (v > best){ best = v; thr = i; } }
+  return thr;
+}
+// Bon (heller Bereich) im Bild finden → 4 Ecken (normiert, Reihenfolge: oben links, oben rechts, unten rechts, unten links)
+function detectQuad(src){
+  const s = 320 / Math.max(src.width, src.height), w = Math.max(8, Math.round(src.width * s)), h = Math.max(8, Math.round(src.height * s));
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const cx = c.getContext('2d'); cx.drawImage(src, 0, 0, w, h);
+  const d = cx.getImageData(0, 0, w, h).data, br = new Uint8Array(w * h), hist = new Uint32Array(256), sat = new Uint8Array(w * h);
+  for (let i = 0, j = 0; j < w * h; i += 4, j++){ const mx = Math.max(d[i], d[i+1], d[i+2]), mn = Math.min(d[i], d[i+1], d[i+2]); br[j] = mx; sat[j] = mx - mn; hist[mx]++; }
+  const thr = Math.max(110, otsu(hist, w * h));
+  const mask = new Uint8Array(w * h); for (let j = 0; j < w * h; j++) mask[j] = br[j] > thr && sat[j] < 60 ? 1 : 0;
+  // größte zusammenhängende Fläche
+  const lab = new Int32Array(w * h), stack = []; let bestId = 0, bestN = 0, id = 0;
+  for (let j = 0; j < w * h; j++){
+    if (!mask[j] || lab[j]) continue; id++; let n = 0; stack.push(j); lab[j] = id;
+    while (stack.length){ const k = stack.pop(); n++; const x = k % w, y = (k / w) | 0;
+      if (x > 0 && mask[k-1] && !lab[k-1]){ lab[k-1] = id; stack.push(k-1); }
+      if (x < w-1 && mask[k+1] && !lab[k+1]){ lab[k+1] = id; stack.push(k+1); }
+      if (y > 0 && mask[k-w] && !lab[k-w]){ lab[k-w] = id; stack.push(k-w); }
+      if (y < h-1 && mask[k+w] && !lab[k+w]){ lab[k+w] = id; stack.push(k+w); } }
+    if (n > bestN){ bestN = n; bestId = id; }
+  }
+  c.width = c.height = 0;
+  if (bestN < w * h * 0.08) return [[0.06,0.04],[0.94,0.04],[0.94,0.96],[0.06,0.96]];
+  let tl = [0,0,1e9], tr = [0,0,-1e9], brc = [0,0,-1e9], bl = [0,0,1e9];
+  for (let j = 0; j < w * h; j++){ if (lab[j] !== bestId) continue; const x = j % w, y = (j / w) | 0;
+    if (x + y < tl[2]) tl = [x, y, x + y]; if (x + y > brc[2]) brc = [x, y, x + y];
+    if (x - y > tr[2]) tr = [x, y, x - y]; if (x - y < bl[2]) bl = [x, y, x - y]; }
+  return [tl, tr, brc, bl].map(p => [Math.min(1, Math.max(0, (p[0] + 0.5) / w)), Math.min(1, Math.max(0, (p[1] + 0.5) / h))]);
+}
+function solveHomography(from, to){
+  const A = [], b = [];
+  for (let i = 0; i < 4; i++){ const [u, v] = from[i], [x, y] = to[i];
+    A.push([u, v, 1, 0, 0, 0, -u * x, -v * x]); b.push(x);
+    A.push([0, 0, 0, u, v, 1, -u * y, -v * y]); b.push(y); }
+  for (let c = 0; c < 8; c++){
+    let p = c; for (let r = c + 1; r < 8; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+    [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]];
+    for (let r = 0; r < 8; r++){ if (r === c) continue; const f = A[r][c] / A[c][c]; for (let k = c; k < 8; k++) A[r][k] -= f * A[c][k]; b[r] -= f * b[c]; }
+  }
+  return b.map((v, i) => v / A[i][i]);
+}
+// Ausschnitt perspektivisch entzerren
+function warpQuad(src, q){
+  const P = q.map(([x, y]) => [x * src.width, y * src.height]);
+  const dist = (a, c) => Math.hypot(a[0] - c[0], a[1] - c[1]);
+  let W = Math.max(dist(P[0], P[1]), dist(P[3], P[2])), H = Math.max(dist(P[0], P[3]), dist(P[1], P[2]));
+  let sc = Math.min(1500 / W, Math.sqrt(6e6 / (W * H))); if (W * sc < 1000) sc = Math.min(1000 / W, Math.sqrt(6e6 / (W * H)));
+  W = Math.max(50, Math.round(W * sc)); H = Math.max(50, Math.round(H * sc));
+  const h = solveHomography([[0,0],[W,0],[W,H],[0,H]], P);
+  const sw = src.width, sh = src.height;
+  const sd = src.getContext('2d').getImageData(0, 0, sw, sh).data;
+  const out = document.createElement('canvas'); out.width = W; out.height = H;
+  const ox = out.getContext('2d'), od = ox.createImageData(W, H), o = od.data;
+  for (let y = 0; y < H; y++){
+    for (let x = 0; x < W; x++){
+      const z = h[6] * x + h[7] * y + 1, fx = (h[0] * x + h[1] * y + h[2]) / z, fy = (h[3] * x + h[4] * y + h[5]) / z;
+      const x0 = Math.floor(fx), y0 = Math.floor(fy), k = (y * W + x) * 4;
+      if (x0 < 0 || y0 < 0 || x0 >= sw - 1 || y0 >= sh - 1){ o[k] = o[k+1] = o[k+2] = 255; o[k+3] = 255; continue; }
+      const ax = fx - x0, ay = fy - y0, i00 = (y0 * sw + x0) * 4, i10 = i00 + 4, i01 = i00 + sw * 4, i11 = i01 + 4;
+      for (let ch = 0; ch < 3; ch++) o[k+ch] = (sd[i00+ch] * (1-ax) + sd[i10+ch] * ax) * (1-ay) + (sd[i01+ch] * (1-ax) + sd[i11+ch] * ax) * ay;
+      o[k+3] = 255;
+    }
+  }
+  ox.putImageData(od, 0, 0);
+  return out;
+}
+function canvasFrom(srcEl, w, h, maxSide){
+  const s = Math.min(1, maxSide / Math.max(w, h)), c = document.createElement('canvas');
+  c.width = Math.round(w * s); c.height = Math.round(h * s); c.getContext('2d').drawImage(srcEl, 0, 0, c.width, c.height); return c;
+}
+const Scan = {
+  stream: null, src: null, q: null,
+  root(){ let r = document.getElementById('scanner'); if (!r){ r = document.createElement('div'); r.id = 'scanner'; document.body.appendChild(r); } return r; },
+  async open(){
+    const r = this.root();
+    r.innerHTML = `<div class="sc-top"><button class="ghost" onclick="Scan.close()">Abbrechen</button><span>Bon scannen</span><span style="width:80px"></span></div>
+      <div class="sc-view"><video id="scVid" playsinline autoplay muted></video><div class="sc-frame"></div><div class="sc-hint">Bon flach hinlegen, dunkler Untergrund, ganzen Bon in den Rahmen. Lange Bons in mehreren Teilen.</div></div>
+      <div class="sc-bar"><button class="ghost" onclick="Scan.pick()">Bild wählen</button><button class="sc-shot" aria-label="Aufnehmen" onclick="Scan.shoot()"></button><span style="width:90px"></span></div>`;
+    r.style.display = 'flex';
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('no camera api');
+      this.stream = await navigator.mediaDevices.getUserMedia({audio: false, video: {facingMode: {ideal: 'environment'}, width: {ideal: 3840}, height: {ideal: 2160}}});
+      const v = document.getElementById('scVid'); v.srcObject = this.stream; await v.play().catch(() => {});
+    } catch(e){
+      this.close(); ui.viaScan = true; $('#fileCam').click();
+      toast('Kamera in der App nicht verfügbar – es öffnet sich die normale Kamera');
+    }
+  },
+  stop(){ if (this.stream){ this.stream.getTracks().forEach(t => t.stop()); this.stream = null; } },
+  close(){ this.stop(); const r = document.getElementById('scanner'); if (r){ r.innerHTML = ''; r.style.display = 'none'; } if (this.src){ this.src.width = this.src.height = 0; this.src = null; } },
+  pick(){ this.close(); ui.viaScan = true; $('#fileImg').click(); },
+  shoot(){
+    const v = document.getElementById('scVid'); if (!v || !v.videoWidth) return toast('Kamera startet noch …');
+    const c = canvasFrom(v, v.videoWidth, v.videoHeight, 3000);
+    this.stop(); this.edit(c);
+  },
+  async fromFile(file){
+    try { const url = URL.createObjectURL(file); const img = await loadImg(url); const c = canvasFrom(img, img.naturalWidth, img.naturalHeight, 3000); URL.revokeObjectURL(url); this.edit(c); }
+    catch(e){ toast(e.message || 'Bild konnte nicht gelesen werden'); }
+  },
+  edit(c){
+    this.src = c; this.q = detectQuad(c);
+    const prev = canvasFrom(c, c.width, c.height, 1100).toDataURL('image/jpeg', 0.75);
+    const r = this.root(); r.style.display = 'flex';
+    r.innerHTML = `<div class="sc-top"><button class="ghost" onclick="Scan.close()">Abbrechen</button><span>Ränder anpassen</span><span style="width:80px"></span></div>
+      <div class="sc-view"><div class="sc-edit" id="scEdit"><img src="${prev}" alt="Aufnahme" draggable="false">
+        <svg id="scPoly" viewBox="0 0 1 1" preserveAspectRatio="none"><polygon points="" /></svg>
+        ${[0,1,2,3].map(i => `<div class="sc-h" data-i="${i}"></div>`).join('')}</div>
+        <div class="sc-hint">Ecken mit dem Finger auf die Ecken des Bons ziehen.</div></div>
+      <div class="sc-bar"><button class="ghost" onclick="Scan.open()">Neu aufnehmen</button><button class="sc-ok" onclick="Scan.apply()">Übernehmen</button><button class="ghost" onclick="Scan.full()">Ganzes Bild</button></div>`;
+    const box = document.getElementById('scEdit');
+    box.querySelectorAll('.sc-h').forEach(hd => {
+      hd.addEventListener('pointerdown', e => { e.preventDefault(); hd.setPointerCapture(e.pointerId); hd.classList.add('on'); });
+      hd.addEventListener('pointermove', e => { if (!hd.hasPointerCapture(e.pointerId)) return; const rc = box.getBoundingClientRect();
+        this.q[+hd.dataset.i] = [Math.min(1, Math.max(0, (e.clientX - rc.left) / rc.width)), Math.min(1, Math.max(0, (e.clientY - rc.top) / rc.height))]; this.draw(); });
+      hd.addEventListener('pointerup', () => hd.classList.remove('on'));
+    });
+    this.draw();
+  },
+  draw(){
+    const box = document.getElementById('scEdit'); if (!box) return;
+    box.querySelector('polygon').setAttribute('points', this.q.map(p => p.join(',')).join(' '));
+    box.querySelectorAll('.sc-h').forEach(hd => { const p = this.q[+hd.dataset.i]; hd.style.left = p[0] * 100 + '%'; hd.style.top = p[1] * 100 + '%'; });
+  },
+  full(){ this.q = [[0,0],[1,0],[1,1],[0,1]]; this.draw(); },
+  apply(){
+    const r = this.root(); r.querySelector('.sc-bar').innerHTML = '<span style="margin:auto">Wird gerade gerückt …</span>';
+    setTimeout(() => {
+      let out;
+      try { out = warpQuad(this.src, this.q); } catch(e){ out = this.src; this.src = null; }
+      this.close();
+      if (ui.draft) runOcr(out);
+    }, 30);
+  }
+};
+window.Scan = Scan;
 
 /* ============ Aktionen ============ */
 const A = {
@@ -1408,21 +1585,29 @@ const A = {
   },
   async setupAdmin(){
     const org = $('#s_org').value.trim(), name = $('#s_name').value.trim() || 'Admin', pw = $('#s_pw').value, pw2 = $('#s_pw2').value;
-    if (pw.length < 4) return toast('Passwort bitte mit mindestens 4 Zeichen');
-    if (pw !== pw2) return toast('Passwörter stimmen nicht überein');
-    S.mode = 'admin'; S.org = org; S.admin = {name, hash: await hashPw(pw, 'admin')};
+    if (pw && !/^\d{4}$/.test(pw)) return toast('Der Code muss aus genau 4 Ziffern bestehen');
+    if (pw !== pw2) return toast('Codes stimmen nicht überein');
+    S.mode = 'admin'; S.auth2 = true; S.org = org; S.admin = {name, pin: pw ? await hashPw(pw, 'admin') : ''};
     S.settings.budget = parseMoney($('#s_budget').value) || 0;
     S.settings.schedule = readSched('setup');
     save(); setSession({role:'admin'}); render(); this.whatsNew(); try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch(e){}
   },
-  async login(){
-    const pw = $('#pw').value;
-    const ok = isAdmin() ? (await hashPw(pw, 'admin')) === S.admin.hash : S.me && (await hashPw(pw, S.me.id)) === S.me.hash;
-    if (!ok){ toast('Passwort falsch'); $('#pw').value = ''; return; }
+  async pinKey(k){
+    ui.pinBuf = ui.pinBuf || '';
+    if (k === '⌫') ui.pinBuf = ui.pinBuf.slice(0, -1); else if (ui.pinBuf.length < 4) ui.pinBuf += k;
+    const dots = document.getElementById('pindots');
+    if (dots) dots.querySelectorAll('span').forEach((d, i) => d.classList.toggle('on', i < ui.pinBuf.length));
+    if (ui.pinBuf.length < 4) return;
+    const code = ui.pinBuf; ui.pinBuf = '';
+    const ok = isAdmin() ? (await hashPw(code, 'admin')) === S.admin.pin : S.me && (await hashPw(code, S.me.id)) === S.me.pin;
+    if (!ok){ if (dots){ dots.classList.add('shake'); setTimeout(() => { dots.classList.remove('shake'); dots.querySelectorAll('span').forEach(d => d.classList.remove('on')); }, 450); } toast('Code falsch'); return; }
+    this.afterLogin();
+  },
+  afterLogin(){
     setSession({role: S.mode}); ui.tab = 'dash'; render(); draftRestore(); try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch(e){}
     if (S.seenVersion !== VERSION) this.whatsNew();
   },
-  logout(){ setSession(null); ui.draft = null; render(); },
+  logout(){ if (!needPin()) return toast('Kein Code vergeben – Sperren nicht nötig'); setSession(null); ui.draft = null; ui.pinBuf = ''; render(); },
   resetDevice(){
     const t = prompt('Alle Daten auf diesem Gerät löschen? Zum Bestätigen LÖSCHEN eintippen.');
     if (t && t.trim().toUpperCase() === 'LÖSCHEN'){ try { localStorage.removeItem(KEY); } catch(e){} S = blank(); setSession(null); render(); toast('Gerät zurückgesetzt'); }
@@ -1603,28 +1788,28 @@ const A = {
   async addUser(){
     const name = $('#nu_name').value.trim(), pw = $('#nu_pw').value.trim();
     if (!name) return toast('Bitte einen Namen eingeben');
-    if (pw.length < 4) return toast('Passwort bitte mit mindestens 4 Zeichen');
+    if (pw && !/^\d{4}$/.test(pw)) return toast('Der Code muss aus genau 4 Ziffern bestehen');
     if (S.users.some(u => u.name.toLowerCase() === name.toLowerCase())) return toast('Name gibt es schon');
     const id = 'u' + uid();
-    S.users.push({id, name, hash: await hashPw(pw, id), created: Date.now()}); save(); render();
-    modal(`<h3>${esc(name)} angelegt</h3><p>Passwort: <b>${esc(pw)}</b><br><span class="small muted">Notier es dir – es wird nicht im Klartext gespeichert.</span></p>
+    S.users.push({id, name, pin: pw ? await hashPw(pw, id) : '', created: Date.now()}); save(); render();
+    modal(`<h3>${esc(name)} angelegt</h3><p>${pw ? `Code: <b>${esc(pw)}</b><br><span class="small muted">Notier ihn dir – er wird nicht im Klartext gespeichert.</span>` : 'Ohne Code – die App öffnet direkt.'}</p>
       <button class="block" onclick="A.makePackage('${id}')">Paket jetzt erstellen &amp; senden</button><div style="height:8px"></div><button class="ghost block" onclick="A.closeModal()">Später</button>`);
   },
   userMenu(id){
     const u = S.users.find(x => x.id === id);
-    modal(`<h3>${esc(u.name)}</h3><button class="sec block" onclick="A.userPw('${id}')">Neues Passwort vergeben</button><div style="height:8px"></div>
+    modal(`<h3>${esc(u.name)}</h3><button class="sec block" onclick="A.userPw('${id}')">${u.pin ? 'Code ändern / entfernen' : 'Code vergeben'}</button><div style="height:8px"></div>
       <button class="danger block" onclick="A.delUser('${id}')">Person entfernen</button><div style="height:8px"></div><button class="ghost block" onclick="A.closeModal()">Schließen</button>`);
   },
   async userPw(id){
-    const u = S.users.find(x => x.id === id); const pw = prompt('Neues Passwort für ' + u.name + ':');
-    if (!pw || pw.trim().length < 4) return toast('Mindestens 4 Zeichen');
-    u.hash = await hashPw(pw.trim(), id); save(); this.closeModal(); toast('Passwort geändert – neues Paket senden!');
+    const u = S.users.find(x => x.id === id); const pw = prompt('Neuer 4-stelliger Code für ' + u.name + ' (leer lassen = ohne Code):'); if (pw == null) return;
+    if (pw.trim() && !/^\d{4}$/.test(pw.trim())) return toast('Der Code muss aus genau 4 Ziffern bestehen');
+    u.pin = pw.trim() ? await hashPw(pw.trim(), id) : ''; save(); this.closeModal(); render(); toast((u.pin ? 'Code gespeichert' : 'Code entfernt') + ' – neues Paket senden!');
   },
   delUser(id){ const u = S.users.find(x => x.id === id); if (!confirm(u.name + ' entfernen? Die Einkäufe bleiben erhalten.')) return; S.users = S.users.filter(x => x.id !== id); save(); this.closeModal(); render(); },
   async makePackage(id){
     const u = S.users.find(x => x.id === id);
     const since = new Date(); since.setMonth(since.getMonth() - 24); const lim = since.toISOString().slice(0, 7);
-    const pkg = {kind:'eb-paket', v:1, created: Date.now(), org: S.org, user: {id: u.id, name: u.name, hash: u.hash}, settings: S.settings,
+    const pkg = {kind:'eb-paket', v:1, created: Date.now(), org: S.org, user: {id: u.id, name: u.name, pin: u.pin || ''}, settings: S.settings,
       receipts: S.receipts.filter(r => r.date.slice(0, 7) >= lim), dict: S.dict, alias: S.alias};
     await shareOrDownload(`Einkaufsbudget_Paket_${safe(u.name)}_${fileStamp()}.json`, JSON.stringify(pkg));
     this.closeModal();
@@ -1647,11 +1832,12 @@ const A = {
   dictSet(i, c){ const k = ui.dictList[i]; S.dict[k] = Object.assign({}, S.dict[k], {c, t: Date.now()}); save(); toast('Gespeichert'); },
   dictDel(i){ const k = ui.dictList[i]; delete S.dict[k]; save(); render(); },
   async adminPw(){
-    const old = prompt('Aktuelles Admin-Passwort:'); if (old == null) return;
-    if ((await hashPw(old, 'admin')) !== S.admin.hash) return toast('Passwort falsch');
-    const n1 = prompt('Neues Passwort (mind. 4 Zeichen):'); if (!n1 || n1.length < 4) return toast('Zu kurz');
-    const n2 = prompt('Neues Passwort wiederholen:'); if (n1 !== n2) return toast('Stimmt nicht überein');
-    S.admin.hash = await hashPw(n1, 'admin'); save(); toast('Admin-Passwort geändert');
+    if (S.admin.pin){ const old = prompt('Aktueller Code:'); if (old == null) return; if ((await hashPw(old.trim(), 'admin')) !== S.admin.pin) return toast('Code falsch'); }
+    const n1 = prompt('Neuer 4-stelliger Code (leer lassen = ohne Code):'); if (n1 == null) return;
+    if (!n1.trim()){ S.admin.pin = ''; save(); render(); return toast('Code entfernt – die App öffnet ohne Abfrage'); }
+    if (!/^\d{4}$/.test(n1.trim())) return toast('Der Code muss aus genau 4 Ziffern bestehen');
+    const n2 = prompt('Code wiederholen:'); if ((n2 || '').trim() !== n1.trim()) return toast('Stimmt nicht überein');
+    S.admin.pin = await hashPw(n1.trim(), 'admin'); save(); render(); toast('Code gespeichert');
   },
 
   /* Preise */
