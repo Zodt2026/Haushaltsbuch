@@ -139,7 +139,8 @@ button.mini{background:var(--brand2);color:var(--brand);padding:3px 9px;font-siz
 .bpick .cnt{font-size:11px;color:var(--muted);margin-left:2px}
 .bpick.freq{background:#fff3cd;font-weight:700}
 @media (prefers-color-scheme:dark){.bpick.freq{background:#3a3214}}
-.bpick.on .cnt,.bpick.on .tier{color:var(--brand)}
+.bpick.on .tier{color:var(--brand)}
+.bpick.on .cnt{color:#fff;opacity:.85}
 .unused{margin-top:14px;background:#fff8e6;border-radius:12px;padding:8px 12px}
 @media (prefers-color-scheme:dark){.unused{background:#2e2712}}
 .unused summary{color:var(--ink);font-size:14px;margin:0}
@@ -172,6 +173,23 @@ button.mini{background:var(--brand2);color:var(--brand);padding:3px 9px;font-siz
 .pinpad{display:grid;grid-template-columns:repeat(3,76px);gap:14px}
 .pinpad button{width:76px;height:76px;border-radius:50%;background:var(--card);color:var(--ink);border:1px solid var(--line);font-size:28px;font-weight:500;box-shadow:var(--shadow)}
 .pinpad button:active{background:var(--brand2)}
+.li{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.li:last-child{border:0}
+.li .chk{width:28px;height:28px;border-radius:50%;border:2px solid var(--brand);background:transparent;color:#fff;padding:0;flex:none;font-size:16px}
+.li.done .chk{background:var(--brand)}
+.li.done .m div:first-child{text-decoration:line-through;color:var(--muted)}
+.li .m{flex:1;min-width:0;cursor:pointer}
+.li .qty{display:flex;align-items:center;gap:4px}
+.li .qty button{background:var(--brand2);color:var(--brand);width:28px;height:28px;padding:0;border-radius:8px}
+.li .qty span{min-width:18px;text-align:center;font-weight:700}
+.li .del{background:transparent;color:var(--muted);padding:0 4px;font-size:20px}
+.lgrp{font-size:13px;font-weight:700;color:var(--brand);margin:12px 0 2px}
+.lgrp:first-child{margin-top:0}
+.lmatch{margin-top:14px;background:var(--brand2);border-radius:12px;padding:10px 12px;font-size:14px}
+.bs-line{position:absolute;left:8%;right:8%;top:50%;height:2px;background:#ff3b30;box-shadow:0 0 8px #ff3b30;pointer-events:none}
+.bs-card{position:absolute;left:12px;right:12px;bottom:12px;background:rgba(0,0,0,.72);border-radius:12px;padding:10px 12px;font-size:15px;text-align:center}
+.bs-card input{background:#fff;color:#000}
+nav.tabs button{font-size:11px;padding-left:2px;padding-right:2px}
 </style>
 </head>
 <body>
@@ -185,12 +203,12 @@ button.mini{background:var(--brand2);color:var(--brand);padding:3px 9px;font-siz
 <script>
 "use strict";
 /* ============ Version & Neuigkeiten ============ */
-const VERSION = 'v 0.6.3';
+const VERSION = 'v 0.7';
 const WHATS_NEW = {
   bugfix: [],
-  comfort: ['Anmeldung ohne Passwort: Das Passwort ist entfallen. Optional kann ein 4-stelliger Code vergeben werden, der mittig auf dem Bildschirm abgefragt wird','Ohne Code öffnet die App direkt die Übersicht'],
-  neu: ['Eigener Scanner direkt in der App: Kamera mit Rahmen, automatische Erkennung der Bonränder, Ecken mit dem Finger nachziehen, Bild wird gerade gerückt und für die Texterkennung aufbereitet','Auch Fotos aus der Mediathek laufen durch den Scanner','Lange Bons: weitere Teile mit „+ Teil scannen“ ergänzen','Admin: Code für sich und die Mitarbeitenden vergeben, ändern oder entfernen'],
-  soon: ['Budget je Kategorie','Monatsbericht als PDF']
+  comfort: ['„Oft gekauft“: häufige Artikel mit einem Tipp auf die Liste setzen','Liste nach Kategorien sortiert – so wie man durch den Laden geht'],
+  neu: ['Neuer Bereich „Liste“: Einkaufsliste anlegen, Menge festlegen, im Laden abhaken','Strichcode-Scanner: Produkte per Kamera erkennen (Name, Marke, Packungsgröße, Kategorie über die freie Datenbank Open Food Facts) – zum Hinzufügen und zum Abhaken im Laden','Unbekannte Strichcodes einmal benennen – danach erkennt die App sie wieder (auch auf den Geräten der Mitarbeitenden)','Abgleich mit dem Bon: Nach dem Einlesen zeigt die App, welche abgehakten Artikel auf dem Bon stehen, was fehlt und was spontan gekauft wurde – Marke, Packungsgröße und Kategorie werden übernommen','Die Liste wird mit Paketen und Export-Dateien zwischen Admin und Mitarbeitenden abgeglichen'],
+  soon: ['Preis-Tipp beim Scannen (wo zuletzt günstiger)','Budget je Kategorie','Monatsbericht als PDF']
 };
 
 /* ============ Kategorien ============ */
@@ -532,7 +550,7 @@ const KEY = 'einkaufsbudget_v1';
 function blank(){
   return {v:1, mode:null, org:'', admin:{name:'Admin', pin:''}, me:null, users:[],
     settings:{budget:800, monthBudgets:{}, stores:DEFAULT_STORES.slice()},
-    receipts:[], dict:{}, alias:{}, pkgDate:null, lastExport:0, seenVersion:null};
+    receipts:[], dict:{}, alias:{}, list:[], products:{}, pkgDate:null, lastExport:0, seenVersion:null};
 }
 let S;
 try { S = Object.assign(blank(), JSON.parse(localStorage.getItem(KEY) || 'null') || {}); } catch(e){ S = blank(); }
@@ -575,7 +593,24 @@ function brandUsage(){
 }
 function knownBrands(){ const set = new Set(BRANDS); live().forEach(r => r.items.forEach(it => { if (it.brand && it.brand !== BR_CHEAP && it.brand !== BR_LUX) set.add(it.brand); })); return [...set].sort((a, b) => a.localeCompare(b, 'de')); }
 const ofMonth = m => live().filter(r => r.date.slice(0, 7) === m);
-const budgetOf = m => S.settings.monthBudgets[m] != null ? S.settings.monthBudgets[m] : S.settings.budget;
+const prevMonth = m => { const [y, mo] = m.split('-').map(Number); const d = new Date(y, mo - 2, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+const baseBudget = m => S.settings.monthBudgets[m] != null ? S.settings.monthBudgets[m] : S.settings.budget;
+const topupsOf = m => ((S.settings.topups || {})[m] || []);
+const topupSum = m => topupsOf(m).reduce((a, x) => a + (+x.amount || 0), 0);
+const carryMode = m => (S.settings.carry || {})[m];   // 'carry' | 'std' | undefined
+const spentOf = m => r2(ofMonth(m).reduce((a, r) => a + rTotal(r), 0));
+function carryIn(m, depth){
+  if (carryMode(m) !== 'carry' || (depth || 0) > 36) return 0;
+  const pm = prevMonth(m); return r2(budgetOf(pm, (depth || 0) + 1) - spentOf(pm));
+}
+function budgetOf(m, depth){ return r2(baseBudget(m) + topupSum(m) + carryIn(m, depth)); }
+function people(){
+  const list = isAdmin() ? [{id: 'admin', name: S.admin.name || 'Admin'}].concat(S.users.map(u => ({id: u.id, name: u.name}))) : (S.settings.people || []).slice();
+  if (!isAdmin() && S.me && !list.some(p => p.id === S.me.id)) list.unshift({id: S.me.id, name: S.me.name});
+  return list;
+}
+const shoppersOf = r => r.shoppers && r.shoppers.length ? r.shoppers : [{id: r.userId, name: r.userName}];
+const shopperNames = r => shoppersOf(r).map(p => p.name).join(' & ');
 const canEdit = r => isAdmin() || r.userId === meId();
 const qtyOf = it => +it.qty > 0 ? +it.qty : 1;
 const unitOf = it => it.unit === 'kg' ? 'kg' : 'Stk';
@@ -738,7 +773,7 @@ function draftSave(){
   try {
     const d = ui.draft;
     if (!d || !session){ return; }
-    const copy = Object.assign({}, d, {images: undefined, owner: meId(), imgCount: (d.images || []).length, items: d.items.map(it => { const o = Object.assign({}, it); delete o._snip; return o; })});
+    const copy = Object.assign({}, d, {images: undefined, _lmRes: undefined, owner: meId(), imgCount: (d.images || []).length, items: d.items.map(it => { const o = Object.assign({}, it); delete o._snip; return o; })});
     localStorage.setItem(DRAFT_KEY, JSON.stringify(copy));
   } catch(e){}
 }
@@ -756,7 +791,7 @@ async function draftRestore(){
 }
 
 /* ============ UI-Zustand ============ */
-const ui = {pq:'', pcat:'', pbrand:'', psort:'recent', tab:'dash', month:monthKey(), chart:'cat', draft:null, ocr:null, dictQ:'', detail:null};
+const ui = {hp:'', pq:'', pcat:'', pbrand:'', psort:'recent', tab:'dash', month:monthKey(), chart:'cat', draft:null, ocr:null, dictQ:'', detail:null};
 
 /* ============ Toast & Modal ============ */
 let toastT;
@@ -770,12 +805,13 @@ function render(){
   if (!S.mode){ app.innerHTML = viewWelcome(); return; }
   if (!session && !needPin()) setSession({role: S.mode});
   if (!session){ app.innerHTML = viewLogin(); return; }
-  const tabs = [['dash','⌂','Übersicht'],['buy','+','Einkauf'],['hist','☰','Verlauf'],['prices','↗','Preise'],[isAdmin() ? 'admin' : 'data', isAdmin() ? '⚙' : '⇅', isAdmin() ? 'Admin' : 'Daten']];
+  const tabs = [['dash','⌂','Übersicht'],['list','☑','Liste'],['buy','+','Einkauf'],['hist','☰','Verlauf'],['prices','↗','Preise'],[isAdmin() ? 'admin' : 'data', isAdmin() ? '⚙' : '⇅', isAdmin() ? 'Admin' : 'Daten']];
   let body = '';
   if (ui.tab === 'dash') body = viewDash();
   else if (ui.tab === 'buy') body = viewBuy();
   else if (ui.tab === 'hist') body = viewHist();
   else if (ui.tab === 'prices') body = viewPrices();
+  else if (ui.tab === 'list') body = viewList();
   else if (ui.tab === 'admin') body = viewAdmin();
   else body = viewData();
   app.innerHTML = `
@@ -864,6 +900,7 @@ function viewDash(){
     <div class="money-big" style="color:${left < 0 ? 'var(--bad)' : 'inherit'}">${euro(Math.abs(left))}</div>
     <div class="bar ${cls}"><div style="width:${Math.min(pct, 1) * 100}%"></div></div>
     <div class="spread small"><span>Ausgegeben <b>${euro(spent)}</b></span><span class="muted">Budget ${euro(budget)}</span></div>
+    ${(() => { const ci = carryIn(m), tu = topupSum(m); if (!ci && !tu) return ''; return `<div class="small muted" style="margin-top:4px">Budget = Standard ${euro(baseBudget(m))}${ci ? ` ${ci > 0 ? '+' : '−'} Übertrag ${euro(Math.abs(ci))}` : ''}${tu ? ` + Aufstockung ${euro(tu)}` : ''}</div>`; })()}
     ${extra}
     ${!isAdmin() && S.pkgDate ? `<div class="small muted" style="margin-top:6px">Stand vom Admin: ${new Date(S.pkgDate).toLocaleDateString('de-DE')} + deine neuen Einkäufe</div>` : ''}
   </div>
@@ -873,6 +910,8 @@ function viewDash(){
     <div class="chart" style="margin-top:10px">${donut(parts, ptotal)}
     <ul class="legend">${parts.length ? parts.map(p => `<li><span class="dot" style="background:${p.color}"></span><span class="n">${esc(p.name)}</span><span class="p">${Math.round(p.v / ptotal * 100)} %</span><span class="v">${euro(p.v)}</span></li>`).join('') : '<li class="muted">Noch keine Einkäufe in diesem Monat.</li>'}</ul></div>
   </div>
+  ${(() => { const per = personTotals(rs); if (!per.length) return ''; const mx = Math.max(...per.map(p => p.v), 1);
+    return `<div class="card"><h2>Wer hat eingekauft?</h2>${per.map(p => `<div class="hbar"><div class="t"><span>${esc(p.name)} <span class="muted small">(${p.n}×)</span></span><b>${euro(p.v)}</b></div><div class="b"><div style="width:${p.v / mx * 100}%"></div></div></div>`).join('')}${per.length > 1 ? '<p class="small muted" style="margin-bottom:0">Waren mehrere Personen einkaufen, wird der Betrag aufgeteilt.</p>' : ''}</div>`; })()}
   ${stores.length ? `<div class="card"><h2>Nach Geschäft</h2>${stores.map(([n, v]) => `<div class="hbar"><div class="t"><span>${esc(n)}</span><b>${euro(v)}</b></div><div class="b"><div style="width:${v / smax * 100}%"></div></div></div>`).join('')}</div>` : ''}
   <div class="card"><div class="spread"><h2 style="margin:0">Letzte Einkäufe</h2>${rs.length > 5 ? `<button class="ghost small" onclick="A.tab('hist')">Alle</button>` : ''}</div>
     <div class="list">${recent.length ? recent.map(rowReceipt).join('') : `<p class="muted small">Tippe unten auf <b>+ Einkauf</b>, um den ersten Kassenzettel zu erfassen.</p>`}</div></div>`;
@@ -880,7 +919,7 @@ function viewDash(){
 
 function rowReceipt(r){
   return `<div class="it" onclick="A.detail('${r.id}')"><div class="badge">${esc(r.store.slice(0, 3).toUpperCase())}</div>
-  <div class="m"><div>${esc(r.store)}${r.hasImg ? ' <span title="Beleg archiviert">🧾</span>' : ''}</div><div class="small muted">${dateDE(r.date)} · ${esc(r.userName)} · ${r.items.length} Artikel</div></div><b>${euro(rTotal(r))}</b></div>`;
+  <div class="m"><div>${esc(r.store)}${r.hasImg ? ' <span title="Beleg archiviert">🧾</span>' : ''}</div><div class="small muted">${dateDE(r.date)} · ${esc(shopperNames(r))} · ${r.items.length} Artikel</div></div><b>${euro(rTotal(r))}</b></div>`;
 }
 
 function catSelect(sel, onchange, cls){
@@ -888,7 +927,7 @@ function catSelect(sel, onchange, cls){
 }
 
 function viewBuy(){
-  if (!ui.draft) ui.draft = {id:null, step:1, store:'', date:todayISO(), items:[], discounts:[], images:[], bonTotal:null, ocrText:''};
+  if (!ui.draft) ui.draft = {id:null, step:1, store:'', shoppers:[{id: meId(), name: meName()}], date:todayISO(), items:[], discounts:[], images:[], bonTotal:null, ocrText:''};
   const d = ui.draft;
   const steps = `<div class="steps">${[1,2,3].map(i => `<div class="${d.step >= i ? 'on' : ''}"></div>`).join('')}</div>`;
   if (d.step === 1){
@@ -897,8 +936,10 @@ function viewBuy(){
     return `${steps}<div class="card"><h2>1 · Wo hast du eingekauft?</h2>
       <div class="stores">${stores.map((s, i) => `<button class="${d.store===s?'on':''}" onclick="A.storeIdx(${i})">${esc(s)}</button>`).join('')}
       <button class="${custom?'on':''}" onclick="A.storeOther()">${custom ? esc(d.store) : 'Anderes …'}</button></div>
+      <label class="f">Wer war einkaufen?</label>
+      <div class="chips">${people().map((p, i) => `<button class="bpick ${(d.shoppers || []).some(x => x.id === p.id) ? 'on' : ''}" onclick="A.toggleShopper(${i})">${esc(p.name)}</button>`).join('')}</div>
       <label class="f">Datum des Einkaufs</label><input type="date" value="${d.date}" onchange="ui.draft.date=this.value||todayISO()">
-      <div style="height:14px"></div><button class="block" ${d.store ? '' : 'disabled'} onclick="A.step(2)">Weiter</button></div>`;
+      <div style="height:14px"></div><button class="block" ${d.store && (d.shoppers || []).length ? '' : 'disabled'} onclick="A.step(2)">Weiter</button></div>`;
   }
   if (d.step === 2){
     const o = ui.ocr;
@@ -917,6 +958,7 @@ function viewBuy(){
   }
   // Schritt 3: Prüfen
   const imgs = d.images || [];
+  d._lmRes = applyListMatch(d);
   d.discounts = d.discounts || [];
   const sumItems = r2(d.items.reduce((a, it) => a + (+it.price || 0), 0));
   const sumDisc = r2(d.discounts.reduce((a, x) => a + (+x.amount || 0), 0));
@@ -927,6 +969,7 @@ function viewBuy(){
     const bp = basePrice(it), info = [];
     if (qtyOf(it) !== 1 || unitOf(it) === 'kg') info.push(`${qtyLabel(it)} à ${euro(it.price / qtyOf(it))}${unitOf(it) === 'kg' ? '/kg' : ''}`);
     if (unitOf(it) !== 'kg' && it.size && it.size.v > 0) info.push(`Grundpreis <b>${euro(bp.v)}/${bp.u}</b>`);
+    if (it._lm) info.push(`<span title="auf der Einkaufsliste">📋 ${esc(it._lm)}</span>`);
     if (it._wcheck) info.unshift(`<span style="color:var(--warn)">⚖️ Waage-Artikel – Gewicht prüfen</span>`);
     const hasSrc = it.src && imgs[it.src.i];
     return `<div class="item ${it.cat === 'pfand' ? 'pf' : ''}">
@@ -943,11 +986,12 @@ function viewBuy(){
       ${it._snip && hasSrc ? `<div class="snipwrap">${snippet(it.src, imgs, `A.fullBeleg('draft','i${i}')`)}</div>` : ''}
     </div>`;
   };
-  return `${steps}<div class="card"><div class="spread"><h2 style="margin:0">3 · Artikel prüfen</h2><span class="small muted">${esc(d.store)} · ${dateDE(d.date)}</span></div>
+  return `${steps}<div class="card"><div class="spread"><h2 style="margin:0">3 · Artikel prüfen</h2><span class="small muted">${esc(d.store)} · ${dateDE(d.date)} · ${esc((d.shoppers || []).map(x => x.name).join(' & '))}</span></div>
     <p class="small muted" style="margin:6px 0 0">Preis = Gesamtpreis der Zeile. Darunter: Menge, Kategorie, Marke und Packungsgröße (für den Kilo-/Literpreis). Mit <b>🧾 Beleg</b> siehst du die Stelle auf dem Kassenbon. Korrekturen merkt sich die App.</p>
     ${imgs.length ? `<button class="sec block" style="margin-top:10px" onclick="A.fullBeleg('draft')">🧾 Ganzen Beleg ansehen (${imgs.length} ${imgs.length === 1 ? 'Bild' : 'Bilder'})</button>` : ''}
     <div id="items">${d.items.map(itemHtml).join('') || '<p class="muted small">Noch keine Artikel.</p>'}</div>
     <div class="row wrap" style="margin-top:10px"><button class="sec" onclick="A.addItem()">+ Artikel</button><button class="sec" onclick="A.addItem('pfand')">+ Pfand</button><button class="sec" onclick="Scan.open()">+ Teil scannen</button><button class="sec" onclick="$('#filePdf').click()">+ PDF</button></div>
+    ${viewListMatch(d, d._lmRes)}
     ${(d.unused || []).length ? `<details class="unused" open><summary><b>Nicht erkannte Zeilen (${d.unused.length})</b> – prüfen und ggf. übernehmen</summary>
       ${d.unused.map((u, j) => `<div class="urow"><span class="ut">${esc(u.t)}${u.price != null ? ` · <b>${euro(u.price)}</b>` : ''}</span>
         ${u.src && imgs[u.src.i] ? `<button class="mini" onclick="A.fullBeleg('draft','u${j}')">🧾</button>` : ''}<button class="mini" onclick="A.takeUnused(${j})">+ übernehmen</button><button class="del" onclick="A.dropUnused(${j})" aria-label="Verwerfen">×</button></div>`).join('')}</details>` : ''}
@@ -967,10 +1011,20 @@ function viewBuy(){
 }
 
 function viewHist(){
-  const rs = ofMonth(ui.month).sort((a, b) => (b.date + b.createdAt).localeCompare(a.date + a.createdAt));
+  const all = ofMonth(ui.month).sort((a, b) => (b.date + b.createdAt).localeCompare(a.date + a.createdAt));
+  const per = personTotals(all);
+  const rs = ui.hp ? all.filter(r => shoppersOf(r).some(p => p.id === ui.hp)) : all;
   const total = r2(rs.reduce((a, r) => a + rTotal(r), 0));
-  return `${monthNav()}<div class="card"><div class="spread"><h2 style="margin:0">${rs.length} Einkäufe</h2><b>${euro(total)}</b></div>
+  return `${monthNav()}<div class="card">
+    ${per.length > 1 || ui.hp ? `<div class="chips" style="margin-bottom:10px"><button class="bpick ${ui.hp ? '' : 'on'}" onclick="ui.hp='';render()">Alle</button>${per.map(p => `<button class="bpick ${ui.hp === p.id ? 'on' : ''}" onclick="ui.hp='${p.id}';render()">${esc(p.name)} <span class="cnt">${euro(p.v)}</span></button>`).join('')}</div>` : ''}
+    <div class="spread"><h2 style="margin:0">${rs.length} Einkauf${rs.length === 1 ? '' : 'e'}${ui.hp ? ' · ' + esc((per.find(p => p.id === ui.hp) || {}).name || '') : ''}</h2><b>${euro(total)}</b></div>
   <div class="list">${rs.map(rowReceipt).join('') || '<p class="muted small">Keine Einkäufe in diesem Monat.</p>'}</div></div>`;
+}
+// Ausgaben je Person (bei mehreren Personen anteilig)
+function personTotals(rs){
+  const m = {};
+  rs.forEach(r => { const sh = shoppersOf(r), part = rTotal(r) / sh.length; sh.forEach(p => { (m[p.id] = m[p.id] || {id: p.id, name: p.name, v: 0, n: 0}); m[p.id].v += part; m[p.id].n++; }); });
+  return Object.values(m).map(x => Object.assign(x, {v: r2(x.v)})).sort((a, b) => b.v - a.v);
 }
 
 function viewAdmin(){
@@ -983,6 +1037,12 @@ function viewAdmin(){
     <label class="f">Standard-Monatsbudget (€)</label><input inputmode="decimal" value="${moneyInput(S.settings.budget)}" onchange="A.setBudget(this.value)">
     <label class="f">Abweichendes Budget nur für ${monthName(m)} (leer = Standard)</label>
     <div class="row"><input inputmode="decimal" value="${mb != null ? moneyInput(mb) : ''}" placeholder="${moneyInput(S.settings.budget)}" onchange="A.setMonthBudget(this.value)"></div>
+    <label class="f">Rest aus ${monthName(prevMonth(m))}</label>
+    <select onchange="A.setCarry(this.value)"><option value="" ${!carryMode(m) ? 'selected' : ''}>noch nicht entschieden (= Standard)</option><option value="carry" ${carryMode(m) === 'carry' ? 'selected' : ''}>übertragen (${euro(r2(budgetOf(prevMonth(m)) - spentOf(prevMonth(m))))})</option><option value="std" ${carryMode(m) === 'std' ? 'selected' : ''}>nicht übertragen – mit Standard beginnen</option></select>
+    <label class="f">Aufstockungen ${monthName(m)}</label>
+    ${topupsOf(m).map((x, j) => `<div class="drow" style="grid-template-columns:1fr 92px 32px"><span class="small">${esc(x.note || 'Aufstockung')} <span class="muted">${dateDE(x.date)}</span></span><b style="text-align:right">${euro(x.amount)}</b><button class="del" onclick="A.delTopup(${j})" aria-label="Entfernen">×</button></div>`).join('') || '<p class="small muted" style="margin:0">keine</p>'}
+    <button class="sec" style="margin-top:6px" onclick="A.topup()">+ Budget aufstocken</button>
+    <div class="spread small" style="margin-top:10px"><span>Budget ${monthName(m)} gesamt</span><b>${euro(budgetOf(m))}</b></div>
     ${monthNav()}</div>
   <div class="card"><h2>Einkaufsrhythmus</h2>
     <p class="small muted" style="margin-top:0">Aktuell: <b>${esc(schedText())}</b>. Grundlage für die Prognose auf der Übersicht. Wird mit dem nächsten Paket an die Mitarbeitenden übertragen.</p>
@@ -1180,7 +1240,7 @@ function importPackage(p){
   if (S.me && S.me.id !== p.user.id && !confirm(`Dieses Gerät gehört ${S.me.name}. Auf ${p.user.name} umstellen?`)) return;
   if (S.me && S.me.id !== p.user.id){ S.receipts = []; S.lastExport = 0; }
   S.mode = 'user'; S.me = {id: p.user.id, name: p.user.name, pin: p.user.pin || ''}; S.auth2 = true; S.org = p.org || ''; S.settings = Object.assign(blank().settings, p.settings || {});
-  const res = mergeReceipts(p.receipts); mergeDict(p.dict); mergeAlias(p.alias); S.pkgDate = p.created || Date.now();
+  const res = mergeReceipts(p.receipts); mergeDict(p.dict); mergeAlias(p.alias); mergeList(p.list); mergeProducts(p.products); S.pkgDate = p.created || Date.now();
   save(); setSession(null); render();
   toast(`Paket importiert (${res.added + res.updated} Einkäufe aktualisiert).`);
 }
@@ -1198,7 +1258,7 @@ async function importExports(list){
   let a = 0, u = 0, names = [], bel = 0;
   for (const x of list){
     if (!x || x.kind !== 'eb-export') continue;
-    const res = mergeReceipts(x.receipts); mergeDict(x.dict); mergeAlias(x.alias); a += res.added; u += res.updated;
+    const res = mergeReceipts(x.receipts); mergeDict(x.dict); mergeAlias(x.alias); mergeList(x.list); mergeProducts(x.products); a += res.added; u += res.updated;
     bel += await putImages(x.images);
     names.push(x.user ? x.user.name : '?');
   }
@@ -1571,6 +1631,334 @@ const Scan = {
 };
 window.Scan = Scan;
 
+/* ============ Strichcode-Decoder (EAN-13 / EAN-8 / UPC-A) ============ */
+const EAN_L = ['3211','2221','2122','1411','1132','1231','1114','1312','1213','3112'];
+const EAN_G = ['1123','1222','2212','1141','2311','1321','4111','2131','3121','2113'];
+const EAN_PAR = ['LLLLLL','LLGLGG','LLGGLG','LLGGGL','LGLLGG','LGGLLG','LGGGLL','LGLGLG','LGLGGL','LGGLGL'];
+function eanCheck(code){
+  const d = code.split('').map(Number), n = d.length; let s = 0;
+  for (let i = 0; i < n - 1; i++) s += d[n - 2 - i] * (i % 2 === 0 ? 3 : 1);
+  return (10 - s % 10) % 10 === d[n - 1];
+}
+// Zeichen über Kanten-Abstände (T-Werte) bestimmen – robust gegen Unschärfe und Druckbreite
+const tvals = p => [+p[0] + +p[1], +p[1] + +p[2], +p[2] + +p[3]];
+function eanDigit(runs, tables){
+  const sum = runs[0] + runs[1] + runs[2] + runs[3]; if (sum <= 0) return null;
+  const m = sum / 7;
+  const T = [(runs[0] + runs[1]) / m, (runs[1] + runs[2]) / m, (runs[2] + runs[3]) / m];
+  let best = null, bestErr = 1e9;
+  for (const [tab, kind] of tables) for (let v = 0; v < 10; v++){
+    const p = tab[v], tv = tvals(p);
+    let e = Math.abs(T[0] - tv[0]) + Math.abs(T[1] - tv[1]) + Math.abs(T[2] - tv[2]);
+    // 1/7 und 2/8 haben gleiche T-Werte -> über Breite der dunklen Elemente unterscheiden
+    const dark = kind === 'R' ? (runs[0] + runs[2]) / m : (runs[1] + runs[3]) / m;
+    const pd = kind === 'R' ? +p[0] + +p[2] : +p[1] + +p[3];
+    e += Math.abs(dark - pd) * 0.35;
+    if (e < bestErr){ bestErr = e; best = {v, kind}; }
+  }
+  return bestErr < 1.9 ? best : null;
+}
+function eanFromRuns(runs, start, kind){
+  // runs[start] ist ein Balken (Startzeichen 1-1-1)
+  const nDig = kind === 13 ? 6 : 4, total = 3 + nDig * 4 + 5 + nDig * 4 + 3;
+  if (start + total > runs.length) return null;
+  const R = runs.slice(start, start + total);
+  const width = R.reduce((a, b) => a + b, 0), mod = width / (kind === 13 ? 95 : 67);
+  const guardOk = i => R[i] < mod * 2.2 && R[i] > mod * 0.3;
+  if (!guardOk(0) || !guardOk(1) || !guardOk(2)) return null;
+  if (start > 0 && runs[start - 1] < mod * 2) return null;          // Ruhezone vorne
+  if (start + total < runs.length && runs[start + total] < mod * 2) return null; // Ruhezone hinten
+  const mid = 3 + nDig * 4; for (let k = 0; k < 5; k++) if (!guardOk(mid + k)) return null;
+  const end = total - 3; if (!guardOk(end) || !guardOk(end + 1) || !guardOk(end + 2)) return null;
+  let left = '', par = '';
+  for (let i = 0; i < nDig; i++){
+    const r = eanDigit(R.slice(3 + i * 4, 7 + i * 4), kind === 13 ? [[EAN_L, 'L'], [EAN_G, 'G']] : [[EAN_L, 'L']]);
+    if (!r) return null; left += r.v; par += r.kind;
+  }
+  let right = '';
+  for (let i = 0; i < nDig; i++){
+    const r = eanDigit(R.slice(mid + 5 + i * 4, mid + 9 + i * 4), [[EAN_L, 'R']]);
+    if (!r) return null; right += r.v;
+  }
+  let code;
+  if (kind === 13){ const f = EAN_PAR.indexOf(par); if (f < 0) return null; code = f + left + right; }
+  else code = left + right;
+  return eanCheck(code) ? code : null;
+}
+function decodeRuns(runs){
+  // runs beginnt mit Leerraum; Balken an ungeraden Indizes
+  for (let s = 1; s < runs.length; s += 2){
+    const c13 = eanFromRuns(runs, s, 13); if (c13) return c13;
+    const c8 = eanFromRuns(runs, s, 8); if (c8) return c8;
+  }
+  return null;
+}
+function lineRuns(g, threshold){
+  const runs = []; let cur = 0, len = 0; // 0 = hell
+  for (let i = 0; i < g.length; i++){
+    const v = g[i] < threshold[i] ? 1 : 0;
+    if (v === cur) len++; else { runs.push(len); cur = v; len = 1; }
+  }
+  runs.push(len); if (cur === 1) runs.push(0);
+  return runs;
+}
+// Graustufen-Bild (Uint8 Array w*h) nach EAN durchsuchen: mehrere waagrechte Linien, beide Richtungen
+const TW = 12;
+function scanGray(gray, w, h, lines){
+  const found = {};
+  const n = lines || 17;
+  for (let k = 0; k < n; k++){
+    const y = Math.round(h * (0.2 + 0.6 * k / (n - 1)));
+    const g = new Float32Array(w);
+    const y0 = Math.max(0, y - 3), y1 = Math.min(h - 1, y + 3), nr = y1 - y0 + 1;
+    for (let x = 0; x < w; x++){ let s = 0; for (let yy = y0; yy <= y1; yy++) s += gray[yy * w + x]; g[x] = s / nr; }
+    // Schwellwert: Mitte zwischen lokalem Minimum und Maximum
+    let mn = 255, mx = 0; for (let x = 0; x < w; x++){ if (g[x] < mn) mn = g[x]; if (g[x] > mx) mx = g[x]; }
+    if (mx - mn < 40) continue;
+    const win = Math.max(10, Math.round(w / TW)), thr = new Float32Array(w);
+    for (let x = 0; x < w; x += 4){
+      let lo = 255, hi = 0; const a = Math.max(0, x - win), b = Math.min(w, x + win + 1);
+      for (let i = a; i < b; i++){ const v = g[i]; if (v < lo) lo = v; if (v > hi) hi = v; }
+      const t = hi - lo < (mx - mn) * 0.35 ? (mn + mx) / 2 : (lo + hi) / 2;
+      for (let i = x; i < Math.min(w, x + 4); i++) thr[i] = t;
+    }
+    const runs = lineRuns(g, thr);
+    let c = decodeRuns(runs);
+    if (!c){ const rg = g.slice().reverse(), rt = thr.slice().reverse(); c = decodeRuns(lineRuns(rg, rt)); }
+    if (c) found[c] = (found[c] || 0) + 1;
+  }
+  const best = Object.entries(found).sort((a, b) => b[1] - a[1])[0];
+  return best ? {code: best[0], hits: best[1]} : null;
+}
+
+/* ============ Einkaufsliste & Produktdaten ============ */
+const OFF_CAT = [[/beverages|drinks|waters|juices|sodas|beers|wines/, 'getraenke'], [/cheeses/, 'kaese'], [/dairies|milks|yogurts|eggs|butters|creams/, 'milch'],
+  [/sausages|hams|cold-cuts|salamis/, 'wurst'], [/meats|poultry|beef|pork/, 'fleisch'], [/fishes|seafood/, 'fisch'], [/breads|pastries|cakes|viennoiseries/, 'brot'],
+  [/frozen/, 'tk'], [/pastas|rices|flours|cereals-and-potatoes|sugars|oils|legumes/, 'grund'], [/canned|prepared-meals|soups/, 'konserven'],
+  [/breakfast|spreads|jams|honeys|coffees|teas|cocoa/, 'fruehstueck'], [/snacks|chocolates|biscuits|confectioneries|sweets|candies|crisps|chips/, 'suess'],
+  [/condiments|sauces|spices|seasonings|vinegars|mustards|ketchup/, 'gewuerze'], [/fruits|vegetables|plant-based-foods/, 'obst']];
+function offCat(tags, name){
+  const c = categorize(name); if (c !== 'sonstiges') return c;
+  const t = (tags || []).join(' ');
+  for (const [re, cat] of OFF_CAT) if (re.test(t)) return cat;
+  return 'sonstiges';
+}
+function canonBrand(b){
+  b = String(b || '').trim(); if (!b) return '';
+  const n = norm(b); const own = allOwn().find(x => norm(x.b) === n || (x.k || []).includes(n)); if (own) return own.b;
+  const br = BRANDS.find(x => norm(x) === n); return br || b;
+}
+async function offLookup(ean){
+  const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const tm = setTimeout(() => ctl && ctl.abort(), 7000);
+  try {
+    const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${ean}.json?fields=product_name,product_name_de,generic_name_de,brands,quantity,categories_tags`, ctl ? {signal: ctl.signal} : {});
+    if (!r.ok) return null;
+    const j = await r.json(); const p = j && j.product;
+    if (!p || (j.status !== 1 && j.status !== 'success')) return null;
+    const name = String(p.product_name_de || p.product_name || p.generic_name_de || '').trim(); if (!name) return null;
+    return {name, brand: canonBrand(String(p.brands || '').split(',')[0]), size: detectSize(p.quantity || '') || detectSize(name), cat: offCat(p.categories_tags, name), src: 'off', t: Date.now()};
+  } catch(e){ return null; } finally { clearTimeout(tm); }
+}
+async function productFor(ean){
+  S.products = S.products || {};
+  if (S.products[ean]) return S.products[ean];
+  const p = await offLookup(ean);
+  if (p){ S.products[ean] = p; save(); }
+  return p;
+}
+// Ähnlichkeit zweier Artikelnamen (Bon-Kürzel vs. Produktname)
+const nameTokens = s => norm(s).split(' ').filter(t => t.length >= 3 && !/^\d/.test(t) && !['stk','kg','ml','bio','der','die','das','mit','und'].includes(t));
+function nameScore(a, b){
+  const A = nameTokens(a), B = nameTokens(b); if (!A.length || !B.length) return 0;
+  let m = 0;
+  A.forEach(x => { if (B.some(y => x === y || (Math.min(x.length, y.length) >= 4 && (x.startsWith(y) || y.startsWith(x))) || (Math.min(x.length, y.length) >= 5 && editDist(x, y) <= 1))) m++; });
+  return m / Math.min(A.length, B.length) * (0.85 + 0.15 * m / Math.max(A.length, B.length));
+}
+const listOpen = () => (S.list || []).filter(x => !x.del && !x.done);
+const listDone = () => (S.list || []).filter(x => !x.del && x.done);
+function listFind(name, ean){
+  const open = listOpen();
+  if (ean){ const e = open.find(x => x.ean === ean); if (e) return e; }
+  let best = null, bs = 0; open.forEach(x => { const sc = nameScore(name, x.name); if (sc > bs){ bs = sc; best = x; } });
+  return bs >= 0.6 ? best : null;
+}
+function listAdd(o){
+  S.list = S.list || [];
+  const ex = listOpen().find(x => (o.ean && x.ean === o.ean) || norm(x.name) === norm(o.name));
+  if (ex){ ex.qty = (ex.qty || 1) + (o.qty || 1); ex.t = Date.now(); save(); return ex; }
+  const it = Object.assign({id: uid(), qty: 1, done: false, t: Date.now(), by: meName()}, o);
+  if (!it.cat) it.cat = categorize(it.name);
+  if (!it.brand){ const l = S.dict[norm(it.name)]; if (l && l.b) it.brand = l.b; }
+  S.list.push(it); save(); return it;
+}
+function mergeList(list){ S.list = S.list || []; (list || []).forEach(x => { if (!x || !x.id) return; const i = S.list.findIndex(y => y.id === x.id); if (i < 0) S.list.push(x); else if ((x.t || 0) > (S.list[i].t || 0)) S.list[i] = x; }); }
+function mergeProducts(m){ S.products = S.products || {}; Object.entries(m || {}).forEach(([k, v]) => { if (v && (!S.products[k] || (v.t || 0) >= (S.products[k].t || 0))) S.products[k] = Object.assign({}, S.products[k], v, {rn: [...new Set([...((S.products[k] || {}).rn || []), ...(v.rn || [])])]}); }); }
+function frequentNames(){
+  const c = {}, nm = {};
+  live().forEach(r => r.items.forEach(it => { if (it.cat === 'pfand' || /^ausgleich/i.test(it.name)) return; const k = prodKey(it.name); if (!k) return; c[k] = (c[k] || 0) + 1; nm[k] = (aliasOf(it.name) || {}).p || it.name; }));
+  const open = new Set(listOpen().map(x => prodKey(x.name)));
+  return Object.entries(c).filter(([k]) => !open.has(k)).sort((a, b) => b[1] - a[1]).slice(0, 14).map(([k]) => nm[k]);
+}
+
+function viewList(){
+  const open = listOpen(), done = listDone();
+  const groups = {}; open.forEach(x => (groups[x.cat || 'sonstiges'] = groups[x.cat || 'sonstiges'] || []).push(x));
+  const row = x => `<div class="li ${x.done ? 'done' : ''}">
+      <button class="chk" onclick="A.listToggle('${x.id}')" aria-label="abhaken">${x.done ? '✓' : ''}</button>
+      <div class="m" onclick="A.listToggle('${x.id}')"><div>${esc(x.name)}</div>${x.brand || x.size ? `<div class="small muted">${[x.brand, sizeLabel(x.size)].filter(Boolean).map(esc).join(' · ')}</div>` : ''}</div>
+      ${x.done ? '' : `<div class="qty"><button onclick="A.listQty('${x.id}',-1)">−</button><span>${x.qty || 1}</span><button onclick="A.listQty('${x.id}',1)">+</button></div>`}
+      <button class="del" onclick="A.listDel('${x.id}')" aria-label="Entfernen">×</button></div>`;
+  const freq = frequentNames();
+  return `<div class="card"><div class="spread"><h2 style="margin:0">Einkaufsliste</h2><span class="small muted">${open.length} offen${done.length ? ` · ${done.length} erledigt` : ''}</span></div>
+    <div class="row" style="margin-top:10px"><input id="lnew" placeholder="Artikel hinzufügen …" onkeydown="if(event.key==='Enter')A.listAddText()"><button onclick="A.listAddText()">+</button><button class="sec" onclick="BarScan.open('add')" aria-label="Per Strichcode hinzufügen">▥</button></div>
+    ${freq.length ? `<div class="small muted" style="margin-top:10px">Oft gekauft – antippen zum Hinzufügen</div><div class="chips" style="margin-top:4px">${freq.map((n, i) => `<button class="bpick" onclick="A.listAddFreq(${i})">+ ${esc(n)}</button>`).join('')}</div>` : ''}
+  </div>
+  ${open.length ? `<button class="block" style="margin:4px 0 0" onclick="BarScan.open('check')">🛒 Im Laden: Strichcodes scannen &amp; abhaken</button>` : ''}
+  <div class="card">${open.length ? CATS.filter(c => groups[c.id]).map(c => `<div class="lgrp"><span class="dot" style="display:inline-block;background:${c.color}"></span> ${esc(c.name)}</div>${groups[c.id].map(row).join('')}`).join('') : '<p class="muted small" style="margin:0">Die Liste ist leer. Füge Artikel hinzu – per Text, Strichcode (▥) oder aus „Oft gekauft“.</p>'}</div>
+  ${done.length ? `<div class="card"><div class="spread"><h2 style="margin:0">Im Wagen ✓</h2><button class="ghost small" onclick="A.listClearDone()">Leeren</button></div>${done.map(row).join('')}
+    <button class="block" style="margin-top:12px" onclick="A.listFinish()">Einkauf abschließen → Bon erfassen</button>
+    <p class="small muted" style="margin-bottom:0">Nach dem Einlesen des Bons gleicht die App ihn mit den abgehakten Artikeln ab und übernimmt Marke, Packungsgröße und Kategorie.</p></div>` : ''}`;
+}
+
+// Abgleich Bon ↔ Liste
+function listMatch(d){
+  const ids = d.fromList || listDone().map(x => x.id);
+  const L = (S.list || []).filter(x => ids.includes(x.id) && !x.del);
+  const pairs = [], usedL = new Set(), usedI = new Set();
+  const cand = [];
+  d.items.forEach((it, i) => { if (it.cat === 'pfand') return; L.forEach(x => {
+    let sc = nameScore(it.name, x.name);
+    const pr = x.ean && S.products && S.products[x.ean];
+    if (pr && (pr.rn || []).includes(norm(it.name))) sc = 2;
+    if (pr) sc = Math.max(sc, nameScore(it.name, pr.name));
+    if (sc >= 0.5) cand.push([sc, i, x.id]); }); });
+  cand.sort((a, b) => b[0] - a[0]).forEach(([sc, i, id]) => { if (usedI.has(i) || usedL.has(id)) return; usedI.add(i); usedL.add(id); pairs.push([i, id]); });
+  return {pairs, missing: L.filter(x => !usedL.has(x.id)), extra: d.items.map((it, i) => i).filter(i => !usedI.has(i) && d.items[i].cat !== 'pfand'), total: L.length};
+}
+function applyListMatch(d){
+  if (!(S.list || []).some(x => x.done && !x.del)) return null;
+  const res = listMatch(d); if (!res.total) return null;
+  res.pairs.forEach(([i, id]) => { const it = d.items[i], x = S.list.find(y => y.id === id); if (!it || !x) return;
+    it._lm = x.name;
+    if (!it.brand && x.brand) it.brand = x.brand;
+    if (!it.size && x.size) it.size = x.size;
+    if (!it.manual && it.cat === 'sonstiges' && x.cat) it.cat = x.cat; });
+  return res;
+}
+function viewListMatch(d, res){
+  if (!res) return '';
+  return `<div class="lmatch"><b>Abgleich mit der Einkaufsliste</b> – ${res.pairs.length} von ${res.total} abgehakten Artikeln auf dem Bon gefunden ${res.pairs.length === res.total ? '✓' : ''}
+    ${res.missing.length ? `<div class="small" style="margin-top:6px">Abgehakt, aber nicht auf dem Bon:</div>${res.missing.map(x => `<div class="urow"><span class="ut">${esc(x.name)}</span><button class="mini" onclick="A.listToItem('${x.id}')">+ als Artikel</button></div>`).join('')}` : ''}
+    ${res.extra.length ? `<div class="small muted" style="margin-top:6px">Nicht auf der Liste (spontan gekauft): ${res.extra.map(i => esc(d.items[i].name)).join(', ')}</div>` : ''}</div>`;
+}
+
+/* ============ Strichcode-Scanner ============ */
+const BarScan = {
+  mode: 'check', stream: null, timer: null, det: null, last: '', lastT: 0, busy: false, frame: 0, cv: null,
+  root(){ return Scan.root(); },
+  async open(mode){
+    this.mode = mode || 'check';
+    const r = this.root(); r.style.display = 'flex';
+    r.innerHTML = `<div class="sc-top"><button class="ghost" onclick="BarScan.close()">Fertig</button><span>${this.mode === 'add' ? 'Zur Liste hinzufügen' : 'Scannen & abhaken'}</span><button class="ghost" id="bsTorch" style="visibility:hidden" onclick="BarScan.torch()">💡</button></div>
+      <div class="sc-view"><video id="bsVid" playsinline autoplay muted></video><div class="bs-line"></div>
+        <div class="bs-card" id="bsCard">Strichcode in die Mitte halten …</div></div>
+      <div class="sc-bar" style="gap:8px"><input id="bsNum" inputmode="numeric" placeholder="oder Nummer eintippen" style="flex:1;background:#222;color:#fff;border-color:#444"><button onclick="BarScan.manual()">OK</button></div>`;
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({audio: false, video: {facingMode: {ideal: 'environment'}, width: {ideal: 1920}, height: {ideal: 1080}}});
+      const v = document.getElementById('bsVid'); v.srcObject = this.stream; await v.play().catch(() => {});
+      const tr = this.stream.getVideoTracks()[0];
+      try { const caps = tr.getCapabilities ? tr.getCapabilities() : {}; if (caps.torch) document.getElementById('bsTorch').style.visibility = 'visible';
+        if (caps.focusMode && caps.focusMode.includes('continuous')) tr.applyConstraints({advanced: [{focusMode: 'continuous'}]}).catch(() => {}); } catch(e){}
+      if ('BarcodeDetector' in window){ try { this.det = new BarcodeDetector({formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e']}); } catch(e){ this.det = null; } }
+      this.loop();
+    } catch(e){
+      document.getElementById('bsCard').textContent = 'Kamera nicht verfügbar – bitte die Nummer unter dem Strichcode eintippen.';
+    }
+  },
+  torchOn: false,
+  torch(){ const tr = this.stream && this.stream.getVideoTracks()[0]; if (!tr) return; this.torchOn = !this.torchOn; tr.applyConstraints({advanced: [{torch: this.torchOn}]}).catch(() => {}); },
+  close(){ clearTimeout(this.timer); this.timer = null; if (this.stream){ this.stream.getTracks().forEach(t => t.stop()); this.stream = null; } if (this.cv){ this.cv.width = this.cv.height = 0; this.cv = null; } const r = document.getElementById('scanner'); if (r){ r.innerHTML = ''; r.style.display = 'none'; } render(); },
+  async loop(){
+    const v = document.getElementById('bsVid'); if (!v || !this.stream) return;
+    if (v.videoWidth && !this.busy){
+      let code = null;
+      try {
+        if (this.det){ const r = await this.det.detect(v); if (r && r[0]) code = r[0].rawValue; }
+        else code = this.grab(v);
+      } catch(e){ this.det = null; }
+      if (code) this.hit(code);
+    }
+    this.timer = setTimeout(() => this.loop(), 120);
+  },
+  // Bildausschnitt in der Mitte auswerten (abwechselnd waagrecht/senkrecht)
+  grab(v){
+    const vw = v.videoWidth, vh = v.videoHeight; this.frame++;
+    const vert = this.frame % 3 === 0;
+    // Ausschnitt: waagrecht 90 % × 40 %, senkrecht 40 % × 90 %
+    const sw = Math.round(vw * (vert ? 0.4 : 0.9)), sh = Math.round(vh * (vert ? 0.9 : 0.4));
+    const sc = Math.min(1, 1280 / Math.max(sw, sh)), W = Math.round(sw * sc), H = Math.round(sh * sc);
+    if (!this.cv) this.cv = document.createElement('canvas');
+    const c = this.cv, x = c.getContext('2d', {willReadFrequently: true});
+    c.width = W; c.height = H; x.drawImage(v, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, W, H);
+    const d = x.getImageData(0, 0, W, H).data;
+    let g, gw, gh;
+    if (!vert){ g = new Uint8Array(W * H); gw = W; gh = H; for (let i = 0, j = 0; j < g.length; i += 4, j++) g[j] = (d[i] * 77 + d[i+1] * 150 + d[i+2] * 29) >> 8; }
+    else { gw = H; gh = W; g = new Uint8Array(W * H); for (let y = 0; y < H; y++) for (let xx = 0; xx < W; xx++){ const i = (y * W + xx) * 4; g[xx * H + y] = (d[i] * 77 + d[i+1] * 150 + d[i+2] * 29) >> 8; } }
+    const r = scanGray(g, gw, gh, 13);
+    if (!r) return null;
+    // Bestätigung: mehrere Linien im selben Bild oder gleicher Code im Bild davor (EAN-8 strenger)
+    const need = r.code.length === 8 ? 3 : 2;
+    if (r.hits >= need || (this.prev === r.code && r.hits >= need - 1)){ this.prev = null; return r.code; }
+    this.prev = r.code; return null;
+  },
+  beep(){ try { const a = this.ac || (this.ac = new (window.AudioContext || window.webkitAudioContext)()); const o = a.createOscillator(), g = a.createGain(); o.frequency.value = 1200; g.gain.value = 0.15; o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime + 0.09); } catch(e){} try { navigator.vibrate && navigator.vibrate(60); } catch(e){} },
+  manual(){ const n = ($('#bsNum').value || '').replace(/\D/g, ''); if (n.length < 8) return toast('Bitte die 8- oder 13-stellige Nummer eingeben'); $('#bsNum').value = ''; this.hit(n, true); },
+  async hit(code, manual){
+    const now = Date.now(); if (!manual && code === this.last && now - this.lastT < 3000) return;
+    this.last = code; this.lastT = now; this.busy = true; this.beep();
+    const card = document.getElementById('bsCard'); if (card) card.innerHTML = `Strichcode ${esc(code)} – suche Produkt …`;
+    const p = await productFor(code);
+    this.busy = false;
+    if (!p){ this.ask(code); return; }
+    this.handle(code, p);
+  },
+  ask(code){
+    this.busy = true; ui.bsCode = code;
+    const card = document.getElementById('bsCard'); if (!card) return;
+    card.innerHTML = `<div>Unbekannter Strichcode ${esc(code)}</div><div class="row" style="margin-top:6px"><input id="bsName" placeholder="Produktname, z. B. Butter 250g" style="flex:1"><button onclick="BarScan.named()">OK</button></div><button class="ghost small" style="color:#fff" onclick="BarScan.busy=false;document.getElementById('bsCard').textContent='Weiter scannen …'">Überspringen</button>`;
+    setTimeout(() => { const i = document.getElementById('bsName'); i && i.focus(); }, 50);
+  },
+  named(){
+    const n = ($('#bsName').value || '').trim(); if (!n) return;
+    const p = {name: n, brand: canonBrand(detectBrand(n, '')), size: detectSize(n), cat: categorize(n), src: 'user', t: Date.now()};
+    S.products = S.products || {}; S.products[ui.bsCode] = p; save(); this.busy = false; this.handle(ui.bsCode, p);
+  },
+  handle(code, p){
+    const card = document.getElementById('bsCard'); const info = [p.brand, sizeLabel(p.size)].filter(Boolean).map(esc).join(' · ');
+    if (this.mode === 'add'){
+      const it = listAdd({name: p.name, ean: code, brand: p.brand || '', size: p.size || null, cat: p.cat});
+      if (card) card.innerHTML = `<b>✓ ${esc(p.name)}</b>${info ? `<div class="small">${info}</div>` : ''}<div class="small">auf der Liste (${it.qty}×) – nächsten Artikel scannen</div>`;
+      return;
+    }
+    const li = listFind(p.name, code);
+    if (li){
+      li.done = true; li.doneAt = Date.now(); li.t = Date.now(); if (!li.ean) li.ean = code; if (!li.brand && p.brand) li.brand = p.brand; if (!li.size && p.size) li.size = p.size; save();
+      const left = listOpen().length;
+      if (card) card.innerHTML = `<b>✓ ${esc(li.name)}</b> abgehakt${info ? `<div class="small">${info}</div>` : ''}<div class="small">${left ? `noch ${left} offen` : 'Alles erledigt! 🎉'}</div>`;
+    } else if (card && (S.list || []).find(x => !x.del && x.done && (x.ean === code || nameScore(p.name, x.name) >= 0.6))){
+      const dn = S.list.find(x => !x.del && x.done && (x.ean === code || nameScore(p.name, x.name) >= 0.6)); ui.bsDone = dn.id;
+      card.innerHTML = `<b>${esc(dn.name)}</b> ist schon im Wagen ✓ (${dn.qty || 1}×)<br><button class="sc-ok" style="margin-top:6px" onclick="BarScan.more()">Noch eins (+1)</button>`;
+    } else if (card){
+      ui.bsP = {code, p};
+      card.innerHTML = `<div><b>${esc(p.name)}</b> ist nicht auf der Liste</div>${info ? `<div class="small">${info}</div>` : ''}<button class="sc-ok" style="margin-top:6px" onclick="BarScan.addDone()">Hinzufügen &amp; abhaken</button>`;
+    }
+  },
+  more(){ const x = (S.list || []).find(y => y.id === ui.bsDone); if (!x) return; x.qty = (x.qty || 1) + 1; x.t = Date.now(); save(); const card = document.getElementById('bsCard'); if (card) card.innerHTML = `<b>✓ ${esc(x.name)}</b> jetzt ${x.qty}× im Wagen`; },
+  addDone(){ const {code, p} = ui.bsP || {}; if (!p) return; const it = listAdd({name: p.name, ean: code, brand: p.brand || '', size: p.size || null, cat: p.cat}); it.done = true; it.doneAt = Date.now(); it.t = Date.now(); save(); const card = document.getElementById('bsCard'); if (card) card.innerHTML = `<b>✓ ${esc(p.name)}</b> hinzugefügt &amp; abgehakt`; }
+};
+window.BarScan = BarScan;
+
 /* ============ Aktionen ============ */
 const A = {
   closeModal(){ $('#modal').innerHTML = ''; },
@@ -1580,7 +1968,7 @@ const A = {
   whatsNew(){
     const sec = (t, a) => a && a.length ? `<h4>${t}</h4><ul>${a.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
     modal(`<h3>Was ist neu? · ${VERSION}</h3>${sec('Bugfix', WHATS_NEW.bugfix)}${sec('Comfort', WHATS_NEW.comfort)}${sec('Neu hinzugefügt', WHATS_NEW.neu)}${sec('Coming soon', WHATS_NEW.soon)}
-      <div style="height:8px"></div><button class="block" onclick="A.closeModal()">Alles klar</button>`);
+      <div style="height:8px"></div><button class="block" onclick="A.closeModal();A.checkCarry()">Alles klar</button>`);
     S.seenVersion = VERSION; save();
   },
   async setupAdmin(){
@@ -1605,7 +1993,7 @@ const A = {
   },
   afterLogin(){
     setSession({role: S.mode}); ui.tab = 'dash'; render(); draftRestore(); try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch(e){}
-    if (S.seenVersion !== VERSION) this.whatsNew();
+    if (S.seenVersion !== VERSION) this.whatsNew(); else this.checkCarry();
   },
   logout(){ if (!needPin()) return toast('Kein Code vergeben – Sperren nicht nötig'); setSession(null); ui.draft = null; ui.pinBuf = ''; render(); },
   resetDevice(){
@@ -1695,7 +2083,7 @@ const A = {
   cancelDraft(){ if (confirm('Einkauf verwerfen?')){ ui.draft = null; ui.ocr = null; draftClear(); ui.tab = 'dash'; render(); } },
   async saveDraft(){
     const d = ui.draft, now = Date.now();
-    const items = d.items.filter(it => it.name.trim() || it.price).map(it => {
+    const items = d.items.filter(it => it.name.trim() || it.price).map(it => { delete it._lm;
       const o = {name: it.name.trim() || 'Artikel', price: r2(+it.price || 0), cat: it.cat, qty: qtyOf(it), unit: unitOf(it)};
       if (it.brand) o.brand = it.brand;
       if (it.size && it.size.v > 0 && it.size.u) o.size = {v: it.size.v, u: it.size.u};
@@ -1709,11 +2097,22 @@ const A = {
     let r;
     if (d.id){
       r = S.receipts.find(x => x.id === d.id);
-      Object.assign(r, {store: d.store, date: d.date, items, discounts, bonTotal: d.bonTotal, updatedAt: now});
+      Object.assign(r, {store: d.store, date: d.date, shoppers: d.shoppers, items, discounts, bonTotal: d.bonTotal, updatedAt: now});
     } else {
-      r = {id: uid(), userId: meId(), userName: meName(), store: d.store, date: d.date, items, discounts, bonTotal: d.bonTotal, createdAt: now, updatedAt: now};
+      r = {id: uid(), userId: meId(), userName: meName(), shoppers: d.shoppers, store: d.store, date: d.date, items, discounts, bonTotal: d.bonTotal, createdAt: now, updatedAt: now};
       S.receipts.push(r);
     }
+    // Einkaufsliste: gekaufte Artikel lernen und von der Liste nehmen
+    try {
+      const lm = (S.list || []).some(x => x.done && !x.del) ? listMatch(d) : null;
+      if (lm){
+        lm.pairs.forEach(([i, id]) => { const it = d.items[i], x = S.list.find(y => y.id === id); if (!it || !x || !x.ean) return;
+          S.products = S.products || {}; const pr = S.products[x.ean] || (S.products[x.ean] = {name: x.name, t: now});
+          pr.rn = [...new Set([...(pr.rn || []), norm(it.name)])]; pr.t = now; });
+        const ids = d.fromList || listDone().map(x => x.id);
+        S.list.forEach(x => { if (ids.includes(x.id) && x.done && !x.del){ x.del = true; x.t = now; } });
+      }
+    } catch(e){}
     if (imgs.length){
       try { await Arch.put(r.id, plainImgs(imgs)); r.hasImg = imgs.length; imgCache[r.id] = imgs; }
       catch(e){ toast('Beleg konnte nicht archiviert werden (Speicher?)'); }
@@ -1749,7 +2148,7 @@ const A = {
       return `<tr ${clickable ? `style="cursor:pointer" onclick="A.fullBeleg('${r.id}','i${idx}')"` : ''}><td>${qtyOf(it) !== 1 || unitOf(it) === 'kg' ? `<span class="muted">${qtyLabel(it)}</span> ` : ''}${esc(it.name)}${clickable ? ' <span class="small">🧾</span>' : ''}${sub.length ? `<div class="small muted">${sub.join(' · ')}</div>` : ''}</td><td>${euro(it.price)}</td></tr>`; };
     const rows = CATS.filter(c => groups[c.id]).map(c => `<tr><td colspan="2" class="grp"><span class="dot" style="display:inline-block;background:${c.color};margin-right:6px"></span>${esc(c.name)}</td></tr>` + groups[c.id].map(line).join('')).join('');
     const disc = (r.discounts || []).length ? `<tr><td colspan="2" class="grp">Rabatte auf den Bon</td></tr>` + r.discounts.map((x, j) => `<tr ${imgs && x.src ? `style="cursor:pointer" onclick="A.fullBeleg('${r.id}','d${j}')"` : ''}><td>${esc(x.name)}</td><td>${euro(x.amount)}</td></tr>`).join('') : '';
-    modal(`<h3>${esc(r.store)} · ${euro(rTotal(r))}</h3><p class="small muted">${dateDE(r.date)} · erfasst von ${esc(r.userName)}</p>
+    modal(`<h3>${esc(r.store)} · ${euro(rTotal(r))}</h3><p class="small muted">${dateDE(r.date)} · eingekauft von <b>${esc(shopperNames(r))}</b>${shopperNames(r) !== r.userName ? ` · erfasst von ${esc(r.userName)}` : ''}</p>
       ${imgs ? `<button class="sec block" onclick="A.fullBeleg('${r.id}')">🧾 Beleg ansehen</button><p class="small muted" style="margin:6px 0 0">Tipp auf einen Artikel zeigt ihn auf dem Beleg.</p>` : (r.hasImg ? '<p class="small muted">Beleg ist auf einem anderen Gerät archiviert.</p>' : '')}
       <table class="tbl">${rows}${disc}</table><div style="height:14px"></div>
       ${canEdit(r) ? `<div class="row"><button class="sec" style="flex:1" onclick="A.edit('${r.id}')">Bearbeiten</button><button class="danger" onclick="A.del('${r.id}')">Löschen</button></div>` : '<p class="small muted">Nur die erfassende Person oder der Admin kann diesen Einkauf ändern.</p>'}
@@ -1758,7 +2157,7 @@ const A = {
   async edit(id){
     const r = S.receipts.find(x => x.id === id);
     const imgs = r.hasImg ? (await loadImgs(id)) || [] : [];
-    ui.draft = {id: r.id, step: 3, store: r.store, date: r.date, items: r.items.map(it => Object.assign({manual: true, brand: '', size: null}, JSON.parse(JSON.stringify(it)))), discounts: (r.discounts || []).map(x => Object.assign({}, x)), images: imgs.slice(), bonTotal: r.bonTotal ?? null, ocrText: ''};
+    ui.draft = {id: r.id, step: 3, store: r.store, shoppers: shoppersOf(r).map(x => Object.assign({}, x)), date: r.date, items: r.items.map(it => Object.assign({manual: true, brand: '', size: null}, JSON.parse(JSON.stringify(it)))), discounts: (r.discounts || []).map(x => Object.assign({}, x)), images: imgs.slice(), bonTotal: r.bonTotal ?? null, ocrText: ''};
     draftImgsSave(); this.tab('buy');
   },
   del(id){
@@ -1782,6 +2181,56 @@ const A = {
     const m = this.ownEdit(); (m[st] = m[st] || []).push(T(b, t)); save(); render(); toast(b + ' bei ' + st + ' als ' + TIERS[t] + ' gespeichert'); },
   delOwn(st, j){ const m = this.ownEdit(); if (m[st]){ m[st].splice(j, 1); save(); render(); } },
   resetOwn(){ if (confirm('Eigenmarken auf die Standardliste zurücksetzen?')){ delete S.settings.ownBrands; save(); render(); } },
+  listAddText(){ const i = $('#lnew'); const v = (i.value || '').trim(); if (!v) return; listAdd({name: v}); i.value = ''; render(); setTimeout(() => { const n = $('#lnew'); n && n.focus(); }, 30); },
+  listAddFreq(i){ const n = frequentNames()[i]; if (n){ listAdd({name: n}); render(); } },
+  listToggle(id){ const x = (S.list || []).find(y => y.id === id); if (!x) return; x.done = !x.done; x.doneAt = x.done ? Date.now() : null; x.t = Date.now(); save(); render(); },
+  listQty(id, dlt){ const x = (S.list || []).find(y => y.id === id); if (!x) return; x.qty = Math.max(1, (x.qty || 1) + dlt); x.t = Date.now(); save(); render(); },
+  listDel(id){ const x = (S.list || []).find(y => y.id === id); if (!x) return; x.del = true; x.t = Date.now(); save(); render(); },
+  listClearDone(){ if (!confirm('Abgehakte Artikel von der Liste entfernen?')) return; const now = Date.now(); listDone().forEach(x => { x.del = true; x.t = now; }); save(); render(); },
+  listFinish(){
+    ui.draft = {id:null, step:1, store:'', shoppers:[{id: meId(), name: meName()}], date:todayISO(), items:[], discounts:[], images:[], bonTotal:null, ocrText:'', fromList: listDone().map(x => x.id)};
+    this.tab('buy'); toast('Geschäft wählen und Bon scannen – danach folgt der Abgleich');
+  },
+  listToItem(id){
+    const x = (S.list || []).find(y => y.id === id); if (!x || !ui.draft) return;
+    ui.draft.items.push({name: x.name, price: 0, cat: x.cat || categorize(x.name), qty: x.qty || 1, unit: 'Stk', brand: x.brand || '', size: x.size || null, manual: true});
+    render(); toast('Übernommen – bitte Preis eintragen');
+  },
+  toggleShopper(i){
+    const p = people()[i], d = ui.draft; d.shoppers = d.shoppers || [];
+    const j = d.shoppers.findIndex(x => x.id === p.id);
+    if (j >= 0) d.shoppers.splice(j, 1); else d.shoppers.push({id: p.id, name: p.name});
+    render();
+  },
+  setCarry(v, m){ m = m || ui.month; S.settings.carry = S.settings.carry || {}; if (v) S.settings.carry[m] = v; else delete S.settings.carry[m]; save(); render(); },
+  topup(m, preset){
+    m = m || ui.month;
+    const v = prompt(`Budget ${monthName(m)} aufstocken um (€):`, preset != null ? moneyInput(preset) : ''); if (v == null) return;
+    const amount = parseMoney(v); if (!(amount > 0)) return toast('Bitte einen Betrag eingeben');
+    const note = prompt('Notiz (optional), z. B. „Überzug ausgeglichen“:', '') || '';
+    S.settings.topups = S.settings.topups || {}; (S.settings.topups[m] = S.settings.topups[m] || []).push({amount, note: note.trim(), date: todayISO()});
+    save(); this.closeModal(); render(); toast(`Budget ${monthName(m)} um ${euro(amount)} aufgestockt`);
+  },
+  delTopup(j){ const l = topupsOf(ui.month); if (!confirm('Aufstockung entfernen?')) return; l.splice(j, 1); save(); render(); },
+  checkCarry(){
+    if (!isAdmin() || !session) return;
+    const m = monthKey(), pm = prevMonth(m);
+    if (carryMode(m) || (S.settings.carryAsked || {})[m]) return;
+    if (!ofMonth(pm).length) return;
+    const left = r2(budgetOf(pm) - spentOf(pm));
+    ui.carryM = m;
+    modal(`<h3>Neuer Monat: ${monthName(m)}</h3>
+      <p>${monthName(pm)}: Budget ${euro(budgetOf(pm))}, ausgegeben ${euro(spentOf(pm))}.</p>
+      <p style="font-size:20px;font-weight:700;color:${left < 0 ? 'var(--bad)' : 'var(--good)'}">${left >= 0 ? 'Übrig: ' : 'Überzogen um '}${euro(Math.abs(left))}</p>
+      ${left > 0 ? `<button class="block" onclick="A.decideCarry('carry')">Rest übertragen → ${monthName(m)} startet mit ${euro(baseBudget(m) + topupSum(m) + left)}</button><div style="height:8px"></div>
+        <button class="sec block" onclick="A.decideCarry('std')">Nicht übertragen – mit Standard ${euro(baseBudget(m))} beginnen</button>`
+      : left < 0 ? `<button class="block" onclick="A.topup('${pm}', ${-left});A.decideCarry('std')">${monthName(pm)} um ${euro(-left)} aufstocken (anderer Betrag möglich)</button><div style="height:8px"></div>
+        <button class="sec block" onclick="A.decideCarry('carry')">Überzug vom ${monthName(m)} abziehen → startet mit ${euro(baseBudget(m) + topupSum(m) + left)}</button><div style="height:8px"></div>
+        <button class="sec block" onclick="A.decideCarry('std')">Ignorieren – mit Standard ${euro(baseBudget(m))} beginnen</button>`
+      : `<button class="block" onclick="A.decideCarry('std')">Mit Standard ${euro(baseBudget(m))} beginnen</button>`}
+      <p class="small muted">Lässt sich jederzeit im Admin-Bereich unter Budget ändern.</p>`);
+  },
+  decideCarry(v){ const m = ui.carryM || monthKey(); this.setCarry(v, m); S.settings.carryAsked = S.settings.carryAsked || {}; S.settings.carryAsked[m] = true; save(); this.closeModal(); render(); },
   /* Admin */
   setBudget(v){ S.settings.budget = parseMoney(v); save(); render(); toast('Budget gespeichert'); },
   setMonthBudget(v){ if (String(v).trim()) S.settings.monthBudgets[ui.month] = parseMoney(v); else delete S.settings.monthBudgets[ui.month]; save(); render(); toast('Gespeichert'); },
@@ -1809,17 +2258,17 @@ const A = {
   async makePackage(id){
     const u = S.users.find(x => x.id === id);
     const since = new Date(); since.setMonth(since.getMonth() - 24); const lim = since.toISOString().slice(0, 7);
-    const pkg = {kind:'eb-paket', v:1, created: Date.now(), org: S.org, user: {id: u.id, name: u.name, pin: u.pin || ''}, settings: S.settings,
-      receipts: S.receipts.filter(r => r.date.slice(0, 7) >= lim), dict: S.dict, alias: S.alias};
+    const pkg = {kind:'eb-paket', v:1, created: Date.now(), org: S.org, user: {id: u.id, name: u.name, pin: u.pin || ''}, settings: Object.assign({}, S.settings, {people: people()}),
+      receipts: S.receipts.filter(r => r.date.slice(0, 7) >= lim), dict: S.dict, alias: S.alias, list: S.list || [], products: S.products || {}};
     await shareOrDownload(`Einkaufsbudget_Paket_${safe(u.name)}_${fileStamp()}.json`, JSON.stringify(pkg));
     this.closeModal();
   },
   csv(){
     const rs = ofMonth(ui.month).sort((a, b) => a.date.localeCompare(b.date));
     const q = s => '"' + String(s).replace(/"/g, '""') + '"';
-    const lines = [['Datum','Geschäft','Person','Artikel','Marke','Menge','Einheit','Einzelpreis','Inhalt','Grundpreis','Grundpreis-Einheit','Kategorie','Bereich','Preis'].join(';')];
-    rs.forEach(r => { r.items.forEach(it => { const c = CAT[it.cat] || CAT.sonstiges; lines.push([dateDE(r.date), q(r.store), q(r.userName), q(it.name), q(it.brand || ''), String(qtyOf(it)).replace('.', ','), unitOf(it), r2(it.price / qtyOf(it)).toFixed(2).replace('.', ','), q(sizeLabel(it.size)), r2(basePrice(it).v).toFixed(2).replace('.', ','), basePrice(it).u, q(c.name), GROUPS[c.g].name, r2(it.price).toFixed(2).replace('.', ',')].join(';')); });
-      (r.discounts || []).forEach(x => lines.push([dateDE(r.date), q(r.store), q(r.userName), q(x.name), '', '', '', '', '', '', '', 'Rabatt', '', r2(x.amount).toFixed(2).replace('.', ',')].join(';'))); });
+    const lines = [['Datum','Geschäft','Eingekauft von','Erfasst von','Artikel','Marke','Menge','Einheit','Einzelpreis','Inhalt','Grundpreis','Grundpreis-Einheit','Kategorie','Bereich','Preis'].join(';')];
+    rs.forEach(r => { r.items.forEach(it => { const c = CAT[it.cat] || CAT.sonstiges; lines.push([dateDE(r.date), q(r.store), q(shopperNames(r)), q(r.userName), q(it.name), q(it.brand || ''), String(qtyOf(it)).replace('.', ','), unitOf(it), r2(it.price / qtyOf(it)).toFixed(2).replace('.', ','), q(sizeLabel(it.size)), r2(basePrice(it).v).toFixed(2).replace('.', ','), basePrice(it).u, q(c.name), GROUPS[c.g].name, r2(it.price).toFixed(2).replace('.', ',')].join(';')); });
+      (r.discounts || []).forEach(x => lines.push([dateDE(r.date), q(r.store), q(shopperNames(r)), q(r.userName), q(x.name), '', '', '', '', '', '', '', 'Rabatt', '', r2(x.amount).toFixed(2).replace('.', ',')].join(';'))); });
     shareOrDownload(`Einkaufsbudget_${ui.month}.csv`, '\ufeff' + lines.join('\r\n'), 'text/csv');
   },
   async backup(){
@@ -1878,13 +2327,13 @@ const A = {
     const myDict = {}; Object.entries(S.dict).forEach(([k, v]) => { if ((v.t || 0) > (S.pkgDate || 0)) myDict[k] = v; });
     const images = {};
     for (const r of mine.filter(r => r.hasImg && !r.deleted && (r.updatedAt || 0) > (S.lastExport || 0))){ try { const x = await Arch.get(r.id); if (x) images[r.id] = x; } catch(e){} }
-    const ok = await shareOrDownload(`Einkaeufe_${safe(meName())}_${fileStamp()}.json`, JSON.stringify({kind:'eb-export', v:2, created: Date.now(), user: {id: S.me.id, name: S.me.name}, receipts: mine, dict: myDict, alias: myAlias, images}));
+    const ok = await shareOrDownload(`Einkaeufe_${safe(meName())}_${fileStamp()}.json`, JSON.stringify({kind:'eb-export', v:2, created: Date.now(), user: {id: S.me.id, name: S.me.name}, receipts: mine, dict: myDict, alias: myAlias, list: S.list || [], products: S.products || {}, images}));
     if (ok){ S.lastExport = Date.now(); save(); render(); toast('Datei erstellt – bitte an den Admin schicken'); }
   }
 };
 window.A = A; window.ui = ui;
 render();
-if (session){ draftRestore(); if (S.seenVersion !== VERSION) A.whatsNew(); }
+if (session){ draftRestore(); if (S.seenVersion !== VERSION) A.whatsNew(); else A.checkCarry(); }
 </script>
 </body>
 </html>
