@@ -161,7 +161,7 @@ button.mini{background:var(--brand2);color:var(--brand);padding:3px 9px;font-siz
 .sc-edit img{display:block;max-width:100%;max-height:calc(100vh - 210px);pointer-events:none}
 .sc-edit svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .sc-edit polygon{fill:rgba(31,111,92,.18);stroke:#3fe0b0;stroke-width:.006;vector-effect:non-scaling-stroke}
-.sc-h{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:3px solid #3fe0b0;background:rgba(255,255,255,.25);touch-action:none}
+.sc-h{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:3px solid #3fe0b0;background:rgba(255,255,255,.25);pointer-events:none}
 .sc-h.on{background:rgba(63,224,176,.5)}
 .pinwrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px 0}
 .pinwrap h1{margin:0 0 4px;font-size:24px}
@@ -190,6 +190,12 @@ button.mini{background:var(--brand2);color:var(--brand);padding:3px 9px;font-siz
 .bs-card{position:absolute;left:12px;right:12px;bottom:12px;background:rgba(0,0,0,.72);border-radius:12px;padding:10px 12px;font-size:15px;text-align:center}
 .bs-card input{background:#fff;color:#000}
 nav.tabs button{font-size:11px;padding-left:2px;padding-right:2px}
+.offb{display:inline-block;font-size:11px;font-weight:700;background:#efe6ff;color:#6a3fbf;border-radius:6px;padding:1px 6px;vertical-align:1px}
+@media (prefers-color-scheme:dark){.offb{background:#2d2340;color:#c9b3ff}}
+.offbox{margin-top:14px;border:1px dashed var(--line);border-radius:12px;padding:10px 12px}
+.offbox .sw{display:flex;align-items:center;gap:8px;font-size:15px}
+.offbox .sw input{width:22px;height:22px}
+.learned{color:var(--good);font-weight:600}
 </style>
 </head>
 <body>
@@ -203,11 +209,11 @@ nav.tabs button{font-size:11px;padding-left:2px;padding-right:2px}
 <script>
 "use strict";
 /* ============ Version & Neuigkeiten ============ */
-const VERSION = 'v 0.7';
+const VERSION = 'v 0.8';
 const WHATS_NEW = {
-  bugfix: [],
-  comfort: ['„Oft gekauft“: häufige Artikel mit einem Tipp auf die Liste setzen','Liste nach Kategorien sortiert – so wie man durch den Laden geht'],
-  neu: ['Neuer Bereich „Liste“: Einkaufsliste anlegen, Menge festlegen, im Laden abhaken','Strichcode-Scanner: Produkte per Kamera erkennen (Name, Marke, Packungsgröße, Kategorie über die freie Datenbank Open Food Facts) – zum Hinzufügen und zum Abhaken im Laden','Unbekannte Strichcodes einmal benennen – danach erkennt die App sie wieder (auch auf den Geräten der Mitarbeitenden)','Abgleich mit dem Bon: Nach dem Einlesen zeigt die App, welche abgehakten Artikel auf dem Bon stehen, was fehlt und was spontan gekauft wurde – Marke, Packungsgröße und Kategorie werden übernommen','Die Liste wird mit Paketen und Export-Dateien zwischen Admin und Mitarbeitenden abgeglichen'],
+  bugfix: ['Artikelnamen ohne überflüssige Zahlen: Artikelnummern (z. B. bei Aldi), Kassen-Kennziffern und einzelne Ziffern werden entfernt – Mengen wie „2 x“ oder „x 4“ werden als Anzahl übernommen, Packungsgrößen wie „125g“ bleiben'],
+  comfort: ['Ecken beim Zuschneiden: einfach irgendwo ins Bild tippen und ziehen – die nächstgelegene Ecke bewegt sich mit, ohne sie genau treffen zu müssen','Die App lernt Kategorien besser: auch bei leicht unterschiedlich gelesenen Namen (z. B. „Toffifee 1259“ statt „125g“) und bevorzugt je Geschäft – mit Hinweis „gelernt“ beim Prüfen'],
+  neu: ['Einkäufe aus dem Monatsbudget herauslösen: Schalter „Nicht aus dem Monatsbudget“ mit Zweck (z. B. Sonderanschaffung) – zählt nicht gegen das Budget','Zwei Diagramme auf der Übersicht: Monatsbudget und Gesamt inkl. herausgelöster Einkäufe','Verlauf: herausgelöste Einkäufe sind markiert, Summen getrennt'],
   soon: ['Preis-Tipp beim Scannen (wo zuletzt günstiger)','Budget je Kategorie','Monatsbericht als PDF']
 };
 
@@ -267,10 +273,25 @@ CATS.forEach(c => {
 [['linsen chips','suess'],['tafel','suess'],['tafelwasser','getraenke'],['choceur','suess'],['chocr','suess'],['tortilla chips','suess'],['kinder ue ei','suess'],['ue ei','suess'],['butterk','suess'],['butterkeks','suess'],['toffifee','suess'],['kinder ue','suess'],['h milch','milch'],['creme fraiche','milch'],['wc papier','papier'],['wc reiniger','reinigung'],['wc ente','reinigung'],['nuss nougat','fruehstueck'],['red bull','getraenke'],['ritter sport','suess'],['kinder schoko','suess'],['rote bete','obst'],['hafer drink','getraenke']]
   .forEach(([w,c]) => KW.push({k:norm(w).replace(/ /g,''), cat:c}));
 
-function categorize(name){
+// Lernschlüssel: Name ohne Zahlen/Einheiten (unempfindlich gegen Lesefehler bei Größen)
+function learnKey(name){ return norm(name).split(' ').filter(w => w.length >= 2 && !/\d/.test(w) && !/^(g|gr|kg|l|ml|cl|er|stk|st|x)$/.test(w)).join(' '); }
+function learnedFor(name, store){
+  const n = norm(name), lk = learnKey(name), st = norm(store || ui.parseStore || '');
+  if (st && lk && S.dict['@' + st + '|' + lk]) return S.dict['@' + st + '|' + lk];
+  if (S.dict[n]) return S.dict[n];
+  if (lk && S.dict['~' + lk]) return S.dict['~' + lk];
+  if (lk.length >= 5){
+    let best = null, bs = 0;
+    for (const k in S.dict){ if (k[0] !== '~') continue; const kk = k.slice(1); if (Math.abs(kk.length - lk.length) > 2) continue;
+      const d = editDist(kk, lk) <= 1 ? 1 : nameScore(kk, lk); if (d > bs){ bs = d; best = S.dict[k]; } }
+    if (bs >= 0.9) return best;
+  }
+  return null;
+}
+function categorize(name, store){
   const n = norm(name);
   if (!n) return 'sonstiges';
-  const learned = S.dict[n];
+  const learned = learnedFor(name, store);
   if (learned) return learned.c;
   const spaced = ' ' + n + ' ', desp = n.replace(/ /g, '');
   let best = null, bestLen = 0;
@@ -381,7 +402,8 @@ function detectSize(name){
   return null;
 }
 function enrichItem(it, store){
-  const l = S.dict[norm(it.name)];
+  const l = learnedFor(it.name, store);
+  if (l && l.c && it.cat === l.c) it._learned = true;
   if (!it.brand) it.brand = (l && l.b) || detectBrand(it.name, store);
   if (!it.size) it.size = detectSize(it.name) || (l && l.s) || null;
   // gelernt: Waage-Artikel (kg)
@@ -389,7 +411,7 @@ function enrichItem(it, store){
   return it;
 }
 function defaultSizeUnit(it){
-  const l = S.dict[norm(it.name)];
+  const l = learnedFor(it.name, ui.draft && ui.draft.store);
   if (l && l.su) return l.su; if (l && l.s && l.s.u) return l.s.u;
   return it.cat === 'getraenke' ? 'l' : (it.cat === 'reinigung' || it.cat === 'hygiene') ? 'ml' : 'g';
 }
@@ -425,8 +447,21 @@ function editDist(a, b){
   for (let i = 1; i <= a.length; i++){ const cur = [i]; for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j-1] + 1, prev[j-1] + (a[i-1] === b[j-1] ? 0 : 1)); prev = cur; }
   return prev[b.length];
 }
+// einzelne Zahlen-Token ohne Bezug zum Artikel entfernen (Artikelnummern, Kennziffern); Größen wie 125g, 1,5l, 3,5%, 10er bleiben
+function stripNumbers(n){
+  const UNIT = /^(g|gr|kg|l|ltr|ml|cl|%|er|stk|st|stück|x|×|cm|m|w|mm|rollen|tabs|pack|pck)\.?$/i;
+  const t = n.split(/\s+/);
+  const out = t.filter((w, i) => {
+    if (/^(\d{1,2}\s?[x×*]|[x×*]\d{1,2})$/i.test(w)) return false;              // "4x" / "x4"
+    if (!/^[#*\/.,:;'-]*\d+([.,]\d+)?[#*\/.,:;'-]*$/.test(w)) return true;       // kein reines Zahlen-Token
+    const next = t[i + 1] || '', prev = t[i - 1] || '';
+    if (UNIT.test(next) && !/^[x×*]$/i.test(next) && w.replace(/\D/g, '').length < 5) return true;   // z. B. "1,5 l", "500 g"
+    void prev; return false;
+  });
+  return out.join(' ').replace(/\s+[x×*]\s*$/i, '').replace(/^[x×*]\s+/i, '').trim();
+}
 function cleanName(n){
-  return String(n || '')
+  return stripNumbers(String(n || '')
     .replace(/^[^A-Za-zÄÖÜäöü0-9]*(?:\S{0,3}\s+)?(?=\d{4,}\s)/, '')   // Störzeichen vor Artikelnummer
     .replace(/^\d{1,2}\s*[x×*]\s+/, '')                              // "2 x " vorne
     .replace(/^(?:[\d.,:;'*#\/-]+\s+)+/, '')                          // Zahlen vor dem Namen
@@ -437,9 +472,10 @@ function cleanName(n){
     .replace(/\s+\d+\s*(stk|st)\.?\s*$/i, '')
     .replace(/\s+(stk|st|stück)\.?\s*$/i, '')
     .replace(/[\s,;:.\-]+$/, '')
-    .trim();
+    .trim());
 }
 function parseReceipt(src, store){
+  ui.parseStore = store || '';
   const raw = Array.isArray(src) ? src : String(src || '').split(/\r?\n/).map(t => ({t}));
   const lines = raw.map(l => ({t: fixOcrLine(String(l.t || '').replace(/[_~»«]/g,' ').replace(/\s+/g,' ').trim()).replace(/\|/g, ' ').replace(/\s+/g, ' ').trim(), s: l.b ? {i: l.i || 0, b: l.b} : null})).filter(l => l.t);
   const items = [], discounts = [], used = new Set(), itemIdx = []; let payMode = false, payN = 0, bonTotal = null, subTotal = null, after = false, pending = null, pendQty = null, lastPO = null, stopIdx = lines.length;
@@ -506,6 +542,7 @@ function parseReceipt(src, store){
     let q2 = lineQty ? null : readQty(name);
     if (!q2 && !lineQty){ const mr = QTY_REV_RE.exec(name); if (mr) q2 = {qty: +mr[2], unit: 'Stk', up: parseFloat(mr[1].replace(',', '.'))}; }
     if (!q2 && !lineQty){ const ml = /^(\d{1,2})\s*[x×*]\s+/.exec(name); if (ml && +ml[1] > 0) q2 = {qty: +ml[1], unit: 'Stk', up: val / +ml[1]}; }
+    if (!q2 && !lineQty){ const ml = /(?:^|\s)(\d{1,2})\s*[x×*](?=\s|$)/.exec(name.replace(/^\d{4,}\s+/, '')) || /\s[x×*]\s*(\d{1,2})\s*$/.exec(name); if (ml && +ml[1] > 1) q2 = {qty: +ml[1], unit: 'Stk', up: val / +ml[1]}; }
     name = cleanName(name);
     if (neg){ if (addToPrev(val, L.s)) continue; }
     if (Math.abs(val) > 400) continue; // OCR-Unsinn
@@ -598,7 +635,9 @@ const baseBudget = m => S.settings.monthBudgets[m] != null ? S.settings.monthBud
 const topupsOf = m => ((S.settings.topups || {})[m] || []);
 const topupSum = m => topupsOf(m).reduce((a, x) => a + (+x.amount || 0), 0);
 const carryMode = m => (S.settings.carry || {})[m];   // 'carry' | 'std' | undefined
-const spentOf = m => r2(ofMonth(m).reduce((a, r) => a + rTotal(r), 0));
+const inBudget = r => !r.offBudget;
+const ofMonthB = m => ofMonth(m).filter(inBudget);
+const spentOf = m => r2(ofMonthB(m).reduce((a, r) => a + rTotal(r), 0));
 function carryIn(m, depth){
   if (carryMode(m) !== 'carry' || (depth || 0) > 36) return 0;
   const pm = prevMonth(m); return r2(budgetOf(pm, (depth || 0) + 1) - spentOf(pm));
@@ -646,7 +685,7 @@ function plannedBetween(from, to){
 }
 function tripStats(){
   const today = todayISO(), lim = isoDaysAgo(120), byDate = {};
-  live().forEach(r => { if (r.date >= lim && r.date <= today) byDate[r.date] = (byDate[r.date] || 0) + rTotal(r); });
+  live().forEach(r => { if (!r.offBudget && r.date >= lim && r.date <= today) byDate[r.date] = (byDate[r.date] || 0) + rTotal(r); });
   const dates = Object.keys(byDate).sort(), v = dates.map(d => byDate[d]).filter(x => x > 0);
   const n = v.length; if (!n) return {n: 0};
   const mu = v.reduce((a, b) => a + b, 0) / n;
@@ -664,7 +703,7 @@ function forecast(m){
   const [y, mo] = m.split('-').map(Number); const end = isoOf(y, mo - 1, new Date(y, mo, 0).getDate());
   let dates = plannedBetween(m === cur ? today : m + '-01', end);
   if (m === cur && dates[0] === today && ofMonth(m).some(r => r.date === today)) dates = dates.slice(1);
-  const spent = r2(ofMonth(m).reduce((a, r) => a + rTotal(r), 0)), budget = budgetOf(m), left = budget - spent;
+  const spent = spentOf(m), budget = budgetOf(m), left = budget - spent;
   const st = tripStats();
   const nExp = dates.length * (st.factor || 1);
   const perTrip = nExp > 0 ? left / nExp : null;
@@ -867,9 +906,29 @@ function donut(parts, total){
 }
 const shortName = n => n.replace(/ \(.*\)/,'').split(/,| & /)[0].slice(0, 16);
 
+function chartParts(rs){
+  const map = {};
+  rs.forEach(r => catAmounts(r).forEach(it => {
+    const key = ui.chart === 'cat' ? it.cat : (CAT[it.cat] || CAT.sonstiges).g;
+    map[key] = (map[key] || 0) + it.v;
+  }));
+  const parts = Object.entries(map).filter(([, v]) => v > 0.004).map(([k, v]) => {
+    const meta = ui.chart === 'cat' ? (CAT[k] || CAT.sonstiges) : GROUPS[k];
+    return {name: meta.name, color: meta.color, v: r2(v)};
+  }).sort((a, b) => b.v - a.v);
+  return {parts, total: parts.reduce((a, p) => a + p.v, 0)};
+}
+function chartCard(title, sub, rs, empty, withSeg){
+  const {parts, total} = chartParts(rs);
+  return `<div class="card"><div class="spread"><div><h2 style="margin:0">${title}</h2>${sub ? `<div class="small muted">${sub}</div>` : ''}</div>
+    ${withSeg ? `<div class="seg"><button class="${ui.chart==='cat'?'on':''}" onclick="A.chart('cat')">Kategorien</button><button class="${ui.chart==='grp'?'on':''}" onclick="A.chart('grp')">Bereiche</button></div>` : ''}</div>
+    <div class="chart" style="margin-top:10px">${donut(parts, total)}
+    <ul class="legend">${parts.length ? parts.map(p => `<li><span class="dot" style="background:${p.color}"></span><span class="n">${esc(p.name)}</span><span class="p">${Math.round(p.v / total * 100)} %</span><span class="v">${euro(p.v)}</span></li>`).join('') : `<li class="muted">${empty}</li>`}</ul></div>
+  </div>`;
+}
 function viewDash(){
-  const m = ui.month, rs = ofMonth(m);
-  const spent = r2(rs.reduce((a, r) => a + rTotal(r), 0));
+  const m = ui.month, rs = ofMonth(m), rb = ofMonthB(m), ro = rs.filter(r => r.offBudget);
+  const spent = spentOf(m), offSum = r2(ro.reduce((a, r) => a + rTotal(r), 0)), allSum = r2(spent + offSum);
   const budget = budgetOf(m), left = r2(budget - spent);
   const pct = budget > 0 ? spent / budget : 0;
   const cls = pct > 1 ? 'bad' : pct > .85 ? 'warn' : '';
@@ -878,17 +937,6 @@ function viewDash(){
     const d = new Date(), dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(), rest = dim - d.getDate() + 1;
     extra = `<div class="small muted">Noch ${rest} Tag${rest===1?'':'e'} im Monat${left > 0 ? ` · ca. ${euro(left / rest)} pro Tag` : ''}</div>`;
   }
-  // Kategorien
-  const map = {};
-  rs.forEach(r => catAmounts(r).forEach(it => {
-    const key = ui.chart === 'cat' ? it.cat : (CAT[it.cat] || CAT.sonstiges).g;
-    map[key] = (map[key] || 0) + it.v;
-  }));
-  let parts = Object.entries(map).filter(([, v]) => v > 0.004).map(([k, v]) => {
-    const meta = ui.chart === 'cat' ? (CAT[k] || CAT.sonstiges) : GROUPS[k];
-    return {name: meta.name, color: meta.color, v: r2(v)};
-  }).sort((a, b) => b.v - a.v);
-  const ptotal = parts.reduce((a, p) => a + p.v, 0);
   // Geschäfte
   const st = {}; rs.forEach(r => st[r.store] = (st[r.store] || 0) + rTotal(r));
   const stores = Object.entries(st).sort((a, b) => b[1] - a[1]);
@@ -901,15 +949,13 @@ function viewDash(){
     <div class="bar ${cls}"><div style="width:${Math.min(pct, 1) * 100}%"></div></div>
     <div class="spread small"><span>Ausgegeben <b>${euro(spent)}</b></span><span class="muted">Budget ${euro(budget)}</span></div>
     ${(() => { const ci = carryIn(m), tu = topupSum(m); if (!ci && !tu) return ''; return `<div class="small muted" style="margin-top:4px">Budget = Standard ${euro(baseBudget(m))}${ci ? ` ${ci > 0 ? '+' : '−'} Übertrag ${euro(Math.abs(ci))}` : ''}${tu ? ` + Aufstockung ${euro(tu)}` : ''}</div>`; })()}
+    ${offSum ? `<div class="small" style="margin-top:4px">Außerhalb des Budgets: <b>${euro(offSum)}</b> <span class="muted">(${ro.length}×) · gesamt ${euro(allSum)}</span></div>` : ''}
     ${extra}
     ${!isAdmin() && S.pkgDate ? `<div class="small muted" style="margin-top:6px">Stand vom Admin: ${new Date(S.pkgDate).toLocaleDateString('de-DE')} + deine neuen Einkäufe</div>` : ''}
   </div>
   ${viewForecast()}
-  <div class="card"><div class="spread"><h2 style="margin:0">Wofür am meisten?</h2>
-    <div class="seg"><button class="${ui.chart==='cat'?'on':''}" onclick="A.chart('cat')">Kategorien</button><button class="${ui.chart==='grp'?'on':''}" onclick="A.chart('grp')">Bereiche</button></div></div>
-    <div class="chart" style="margin-top:10px">${donut(parts, ptotal)}
-    <ul class="legend">${parts.length ? parts.map(p => `<li><span class="dot" style="background:${p.color}"></span><span class="n">${esc(p.name)}</span><span class="p">${Math.round(p.v / ptotal * 100)} %</span><span class="v">${euro(p.v)}</span></li>`).join('') : '<li class="muted">Noch keine Einkäufe in diesem Monat.</li>'}</ul></div>
-  </div>
+  ${chartCard('Monatsbudget', `Wofür am meisten? · ${euro(spent)}`, rb, 'Noch keine Einkäufe aus dem Budget in diesem Monat.', true)}
+  ${chartCard('Gesamt', `inkl. ${ro.length ? `${ro.length} herausgelöste${ro.length === 1 ? 'n Einkauf' : ' Einkäufe'} (${euro(offSum)})` : 'herausgelöster Einkäufe – diesen Monat keine'} · ${euro(allSum)}`, rs, 'Noch keine Einkäufe in diesem Monat.', false)}
   ${(() => { const per = personTotals(rs); if (!per.length) return ''; const mx = Math.max(...per.map(p => p.v), 1);
     return `<div class="card"><h2>Wer hat eingekauft?</h2>${per.map(p => `<div class="hbar"><div class="t"><span>${esc(p.name)} <span class="muted small">(${p.n}×)</span></span><b>${euro(p.v)}</b></div><div class="b"><div style="width:${p.v / mx * 100}%"></div></div></div>`).join('')}${per.length > 1 ? '<p class="small muted" style="margin-bottom:0">Waren mehrere Personen einkaufen, wird der Betrag aufgeteilt.</p>' : ''}</div>`; })()}
   ${stores.length ? `<div class="card"><h2>Nach Geschäft</h2>${stores.map(([n, v]) => `<div class="hbar"><div class="t"><span>${esc(n)}</span><b>${euro(v)}</b></div><div class="b"><div style="width:${v / smax * 100}%"></div></div></div>`).join('')}</div>` : ''}
@@ -919,7 +965,7 @@ function viewDash(){
 
 function rowReceipt(r){
   return `<div class="it" onclick="A.detail('${r.id}')"><div class="badge">${esc(r.store.slice(0, 3).toUpperCase())}</div>
-  <div class="m"><div>${esc(r.store)}${r.hasImg ? ' <span title="Beleg archiviert">🧾</span>' : ''}</div><div class="small muted">${dateDE(r.date)} · ${esc(shopperNames(r))} · ${r.items.length} Artikel</div></div><b>${euro(rTotal(r))}</b></div>`;
+  <div class="m"><div>${esc(r.store)}${r.hasImg ? ' <span title="Beleg archiviert">🧾</span>' : ''}${r.offBudget ? ` <span class="offb">außerhalb Budget${r.offNote ? ': ' + esc(r.offNote) : ''}</span>` : ''}</div><div class="small muted">${dateDE(r.date)} · ${esc(shopperNames(r))} · ${r.items.length} Artikel</div></div><b>${euro(rTotal(r))}</b></div>`;
 }
 
 function catSelect(sel, onchange, cls){
@@ -969,6 +1015,7 @@ function viewBuy(){
     const bp = basePrice(it), info = [];
     if (qtyOf(it) !== 1 || unitOf(it) === 'kg') info.push(`${qtyLabel(it)} à ${euro(it.price / qtyOf(it))}${unitOf(it) === 'kg' ? '/kg' : ''}`);
     if (unitOf(it) !== 'kg' && it.size && it.size.v > 0) info.push(`Grundpreis <b>${euro(bp.v)}/${bp.u}</b>`);
+    if (it._learned && !it.manual) info.push(`<span class="learned">gelernt ✓</span>`);
     if (it._lm) info.push(`<span title="auf der Einkaufsliste">📋 ${esc(it._lm)}</span>`);
     if (it._wcheck) info.unshift(`<span style="color:var(--warn)">⚖️ Waage-Artikel – Gewicht prüfen</span>`);
     const hasSrc = it.src && imgs[it.src.i];
@@ -995,6 +1042,9 @@ function viewBuy(){
     ${(d.unused || []).length ? `<details class="unused" open><summary><b>Nicht erkannte Zeilen (${d.unused.length})</b> – prüfen und ggf. übernehmen</summary>
       ${d.unused.map((u, j) => `<div class="urow"><span class="ut">${esc(u.t)}${u.price != null ? ` · <b>${euro(u.price)}</b>` : ''}</span>
         ${u.src && imgs[u.src.i] ? `<button class="mini" onclick="A.fullBeleg('draft','u${j}')">🧾</button>` : ''}<button class="mini" onclick="A.takeUnused(${j})">+ übernehmen</button><button class="del" onclick="A.dropUnused(${j})" aria-label="Verwerfen">×</button></div>`).join('')}</details>` : ''}
+    <div class="offbox"><label class="sw"><input type="checkbox" ${d.offBudget ? 'checked' : ''} onchange="A.setOff(this.checked)"> <b>Nicht aus dem Monatsbudget</b></label>
+      <div class="small muted">Für Sonderanschaffungen o. Ä. – zählt nicht gegen das Budget, erscheint aber in „Gesamt“.</div>
+      ${d.offBudget ? `<input style="margin-top:6px" placeholder="Zweck (optional), z. B. Sommerfest" value="${esc(d.offNote || '')}" onchange="ui.draft.offNote=this.value.trim();draftSave()">` : ''}</div>
     <h4 style="margin:18px 0 4px">Rabatte auf den ganzen Bon</h4>
     <p class="small muted" style="margin:0 0 6px">z. B. Mitarbeiterrabatt, Coupon. Wird auf die Kategorien verteilt, die Artikelpreise für den Preisvergleich bleiben unverändert.</p>
     ${d.discounts.map((x, j) => `<div class="drow"><input value="${esc(x.name)}" onchange="A.setDisc(${j},'name',this.value)"><input class="price" inputmode="decimal" value="${moneyInput(x.amount)}" onchange="A.setDisc(${j},'amount',this.value)">
@@ -1018,6 +1068,7 @@ function viewHist(){
   return `${monthNav()}<div class="card">
     ${per.length > 1 || ui.hp ? `<div class="chips" style="margin-bottom:10px"><button class="bpick ${ui.hp ? '' : 'on'}" onclick="ui.hp='';render()">Alle</button>${per.map(p => `<button class="bpick ${ui.hp === p.id ? 'on' : ''}" onclick="ui.hp='${p.id}';render()">${esc(p.name)} <span class="cnt">${euro(p.v)}</span></button>`).join('')}</div>` : ''}
     <div class="spread"><h2 style="margin:0">${rs.length} Einkauf${rs.length === 1 ? '' : 'e'}${ui.hp ? ' · ' + esc((per.find(p => p.id === ui.hp) || {}).name || '') : ''}</h2><b>${euro(total)}</b></div>
+    ${rs.some(r => r.offBudget) ? `<div class="small muted">davon Monatsbudget ${euro(rs.filter(inBudget).reduce((a, r) => a + rTotal(r), 0))} · außerhalb ${euro(rs.filter(r => r.offBudget).reduce((a, r) => a + rTotal(r), 0))}</div>` : ''}
   <div class="list">${rs.map(rowReceipt).join('') || '<p class="muted small">Keine Einkäufe in diesem Monat.</p>'}</div></div>`;
 }
 // Ausgaben je Person (bei mehreren Personen anteilig)
@@ -1029,7 +1080,7 @@ function personTotals(rs){
 
 function viewAdmin(){
   const m = ui.month, mb = S.settings.monthBudgets[m];
-  const dictKeys = Object.keys(S.dict).sort();
+  const dictKeys = Object.keys(S.dict).filter(k => k[0] !== '~' && k[0] !== '@').sort();
   const q = norm(ui.dictQ);
   const shown = (q ? dictKeys.filter(k => k.includes(q)) : dictKeys).slice(0, 60);
   ui.dictList = shown;
@@ -1602,15 +1653,23 @@ const Scan = {
       <div class="sc-view"><div class="sc-edit" id="scEdit"><img src="${prev}" alt="Aufnahme" draggable="false">
         <svg id="scPoly" viewBox="0 0 1 1" preserveAspectRatio="none"><polygon points="" /></svg>
         ${[0,1,2,3].map(i => `<div class="sc-h" data-i="${i}"></div>`).join('')}</div>
-        <div class="sc-hint">Ecken mit dem Finger auf die Ecken des Bons ziehen.</div></div>
+        <div class="sc-hint">Irgendwo ins Bild tippen und ziehen – die nächste Ecke folgt deinem Finger.</div></div>
       <div class="sc-bar"><button class="ghost" onclick="Scan.open()">Neu aufnehmen</button><button class="sc-ok" onclick="Scan.apply()">Übernehmen</button><button class="ghost" onclick="Scan.full()">Ganzes Bild</button></div>`;
     const box = document.getElementById('scEdit');
-    box.querySelectorAll('.sc-h').forEach(hd => {
-      hd.addEventListener('pointerdown', e => { e.preventDefault(); hd.setPointerCapture(e.pointerId); hd.classList.add('on'); });
-      hd.addEventListener('pointermove', e => { if (!hd.hasPointerCapture(e.pointerId)) return; const rc = box.getBoundingClientRect();
-        this.q[+hd.dataset.i] = [Math.min(1, Math.max(0, (e.clientX - rc.left) / rc.width)), Math.min(1, Math.max(0, (e.clientY - rc.top) / rc.height))]; this.draw(); });
-      hd.addEventListener('pointerup', () => hd.classList.remove('on'));
+    // Tippen irgendwo im Bild: die nächstgelegene Ecke wird um die Fingerbewegung verschoben
+    let drag = null;
+    box.addEventListener('pointerdown', e => {
+      e.preventDefault(); const rc = box.getBoundingClientRect();
+      const px = e.clientX - rc.left, py = e.clientY - rc.top;
+      let bi = 0, bd = 1e9; this.q.forEach((p, i) => { const d = Math.hypot(p[0] * rc.width - px, p[1] * rc.height - py); if (d < bd){ bd = d; bi = i; } });
+      drag = {i: bi, x: e.clientX, y: e.clientY, p: this.q[bi].slice(), w: rc.width, h: rc.height};
+      try { box.setPointerCapture(e.pointerId); } catch(err){}
+      box.querySelectorAll('.sc-h').forEach(h => h.classList.toggle('on', +h.dataset.i === bi));
     });
+    box.addEventListener('pointermove', e => { if (!drag) return; e.preventDefault();
+      this.q[drag.i] = [Math.min(1, Math.max(0, drag.p[0] + (e.clientX - drag.x) / drag.w)), Math.min(1, Math.max(0, drag.p[1] + (e.clientY - drag.y) / drag.h))]; this.draw(); });
+    const end = () => { drag = null; box.querySelectorAll('.sc-h').forEach(h => h.classList.remove('on')); };
+    box.addEventListener('pointerup', end); box.addEventListener('pointercancel', end);
     this.draw();
   },
   draw(){
@@ -2012,7 +2071,7 @@ const A = {
     if (k === 'price') it.price = parseMoney(v);
     else if (k === 'qty'){ delete it._wcheck; const q = parseFloat(String(v).replace(',', '.')); it.qty = q > 0 ? (unitOf(it) === 'kg' ? Math.round(q * 1000) / 1000 : q) : 1; }
     else if (k === 'unit'){ it.unit = v; delete it._wcheck; }
-    else if (k === 'cat'){ it.cat = v; it.manual = true; }
+    else if (k === 'cat'){ it.cat = v; it.manual = true; delete it._learned; }
     else if (k === 'brand') it.brand = String(v).trim();
     else if (k === 'sizev'){ const q = parseFloat(String(v).replace(',', '.')); if (q > 0) it.size = {v: q, u: it.size && it.size.u ? it.size.u : defaultSizeUnit(it)}; else it.size = null; }
     else if (k === 'sizeu'){ if (!v) it.size = null; else it.size = {v: it.size ? it.size.v : 0, u: v}; }
@@ -2083,7 +2142,7 @@ const A = {
   cancelDraft(){ if (confirm('Einkauf verwerfen?')){ ui.draft = null; ui.ocr = null; draftClear(); ui.tab = 'dash'; render(); } },
   async saveDraft(){
     const d = ui.draft, now = Date.now();
-    const items = d.items.filter(it => it.name.trim() || it.price).map(it => { delete it._lm;
+    const items = d.items.filter(it => it.name.trim() || it.price).map(it => { delete it._lm; delete it._learned;
       const o = {name: it.name.trim() || 'Artikel', price: r2(+it.price || 0), cat: it.cat, qty: qtyOf(it), unit: unitOf(it)};
       if (it.brand) o.brand = it.brand;
       if (it.size && it.size.v > 0 && it.size.u) o.size = {v: it.size.v, u: it.size.u};
@@ -2092,14 +2151,14 @@ const A = {
     });
     if (!items.length) return toast('Bitte mindestens einen Artikel eintragen');
     const discounts = (d.discounts || []).filter(x => +x.amount).map(x => Object.assign({name: x.name, amount: r2(x.amount)}, x.src ? {src: x.src} : {}));
-    items.forEach(it => { const k = norm(it.name); if (k.length >= 3 && !/^ausgleich/.test(k) && k !== 'artikel' && it.cat !== 'pfand'){ const e = {c: it.cat, t: now}; if (it.brand) e.b = it.brand; if (it.size){ e.s = it.size; e.su = it.size.u; } if (it.unit === 'kg') e.u = 'kg'; S.dict[k] = e; } });
+    items.forEach(it => { const k = norm(it.name); if (k.length >= 3 && !/^ausgleich/.test(k) && k !== 'artikel' && it.cat !== 'pfand'){ const e = {c: it.cat, t: now}; if (it.brand) e.b = it.brand; if (it.size){ e.s = it.size; e.su = it.size.u; } if (it.unit === 'kg') e.u = 'kg'; S.dict[k] = e; const lk = learnKey(it.name); if (lk.length >= 3){ S.dict['~' + lk] = Object.assign({}, e); if (d.store) S.dict['@' + norm(d.store) + '|' + lk] = Object.assign({}, e); } } });
     const imgs = d.images || [];
     let r;
     if (d.id){
       r = S.receipts.find(x => x.id === d.id);
-      Object.assign(r, {store: d.store, date: d.date, shoppers: d.shoppers, items, discounts, bonTotal: d.bonTotal, updatedAt: now});
+      Object.assign(r, {offBudget: !!d.offBudget, offNote: d.offBudget ? (d.offNote || '') : '', store: d.store, date: d.date, shoppers: d.shoppers, items, discounts, bonTotal: d.bonTotal, updatedAt: now});
     } else {
-      r = {id: uid(), userId: meId(), userName: meName(), shoppers: d.shoppers, store: d.store, date: d.date, items, discounts, bonTotal: d.bonTotal, createdAt: now, updatedAt: now};
+      r = {id: uid(), userId: meId(), userName: meName(), offBudget: !!d.offBudget, offNote: d.offBudget ? (d.offNote || '') : '', shoppers: d.shoppers, store: d.store, date: d.date, items, discounts, bonTotal: d.bonTotal, createdAt: now, updatedAt: now};
       S.receipts.push(r);
     }
     // Einkaufsliste: gekaufte Artikel lernen und von der Liste nehmen
@@ -2148,7 +2207,7 @@ const A = {
       return `<tr ${clickable ? `style="cursor:pointer" onclick="A.fullBeleg('${r.id}','i${idx}')"` : ''}><td>${qtyOf(it) !== 1 || unitOf(it) === 'kg' ? `<span class="muted">${qtyLabel(it)}</span> ` : ''}${esc(it.name)}${clickable ? ' <span class="small">🧾</span>' : ''}${sub.length ? `<div class="small muted">${sub.join(' · ')}</div>` : ''}</td><td>${euro(it.price)}</td></tr>`; };
     const rows = CATS.filter(c => groups[c.id]).map(c => `<tr><td colspan="2" class="grp"><span class="dot" style="display:inline-block;background:${c.color};margin-right:6px"></span>${esc(c.name)}</td></tr>` + groups[c.id].map(line).join('')).join('');
     const disc = (r.discounts || []).length ? `<tr><td colspan="2" class="grp">Rabatte auf den Bon</td></tr>` + r.discounts.map((x, j) => `<tr ${imgs && x.src ? `style="cursor:pointer" onclick="A.fullBeleg('${r.id}','d${j}')"` : ''}><td>${esc(x.name)}</td><td>${euro(x.amount)}</td></tr>`).join('') : '';
-    modal(`<h3>${esc(r.store)} · ${euro(rTotal(r))}</h3><p class="small muted">${dateDE(r.date)} · eingekauft von <b>${esc(shopperNames(r))}</b>${shopperNames(r) !== r.userName ? ` · erfasst von ${esc(r.userName)}` : ''}</p>
+    modal(`<h3>${esc(r.store)} · ${euro(rTotal(r))}</h3><p class="small muted">${r.offBudget ? `<span class="offb">außerhalb des Monatsbudgets${r.offNote ? ': ' + esc(r.offNote) : ''}</span><br>` : ''}${dateDE(r.date)} · eingekauft von <b>${esc(shopperNames(r))}</b>${shopperNames(r) !== r.userName ? ` · erfasst von ${esc(r.userName)}` : ''}</p>
       ${imgs ? `<button class="sec block" onclick="A.fullBeleg('${r.id}')">🧾 Beleg ansehen</button><p class="small muted" style="margin:6px 0 0">Tipp auf einen Artikel zeigt ihn auf dem Beleg.</p>` : (r.hasImg ? '<p class="small muted">Beleg ist auf einem anderen Gerät archiviert.</p>' : '')}
       <table class="tbl">${rows}${disc}</table><div style="height:14px"></div>
       ${canEdit(r) ? `<div class="row"><button class="sec" style="flex:1" onclick="A.edit('${r.id}')">Bearbeiten</button><button class="danger" onclick="A.del('${r.id}')">Löschen</button></div>` : '<p class="small muted">Nur die erfassende Person oder der Admin kann diesen Einkauf ändern.</p>'}
@@ -2157,7 +2216,7 @@ const A = {
   async edit(id){
     const r = S.receipts.find(x => x.id === id);
     const imgs = r.hasImg ? (await loadImgs(id)) || [] : [];
-    ui.draft = {id: r.id, step: 3, store: r.store, shoppers: shoppersOf(r).map(x => Object.assign({}, x)), date: r.date, items: r.items.map(it => Object.assign({manual: true, brand: '', size: null}, JSON.parse(JSON.stringify(it)))), discounts: (r.discounts || []).map(x => Object.assign({}, x)), images: imgs.slice(), bonTotal: r.bonTotal ?? null, ocrText: ''};
+    ui.draft = {id: r.id, step: 3, offBudget: !!r.offBudget, offNote: r.offNote || '', store: r.store, shoppers: shoppersOf(r).map(x => Object.assign({}, x)), date: r.date, items: r.items.map(it => Object.assign({manual: true, brand: '', size: null}, JSON.parse(JSON.stringify(it)))), discounts: (r.discounts || []).map(x => Object.assign({}, x)), images: imgs.slice(), bonTotal: r.bonTotal ?? null, ocrText: ''};
     draftImgsSave(); this.tab('buy');
   },
   del(id){
@@ -2196,6 +2255,7 @@ const A = {
     ui.draft.items.push({name: x.name, price: 0, cat: x.cat || categorize(x.name), qty: x.qty || 1, unit: 'Stk', brand: x.brand || '', size: x.size || null, manual: true});
     render(); toast('Übernommen – bitte Preis eintragen');
   },
+  setOff(v){ ui.draft.offBudget = !!v; if (!v) ui.draft.offNote = ''; render(); },
   toggleShopper(i){
     const p = people()[i], d = ui.draft; d.shoppers = d.shoppers || [];
     const j = d.shoppers.findIndex(x => x.id === p.id);
@@ -2266,9 +2326,9 @@ const A = {
   csv(){
     const rs = ofMonth(ui.month).sort((a, b) => a.date.localeCompare(b.date));
     const q = s => '"' + String(s).replace(/"/g, '""') + '"';
-    const lines = [['Datum','Geschäft','Eingekauft von','Erfasst von','Artikel','Marke','Menge','Einheit','Einzelpreis','Inhalt','Grundpreis','Grundpreis-Einheit','Kategorie','Bereich','Preis'].join(';')];
-    rs.forEach(r => { r.items.forEach(it => { const c = CAT[it.cat] || CAT.sonstiges; lines.push([dateDE(r.date), q(r.store), q(shopperNames(r)), q(r.userName), q(it.name), q(it.brand || ''), String(qtyOf(it)).replace('.', ','), unitOf(it), r2(it.price / qtyOf(it)).toFixed(2).replace('.', ','), q(sizeLabel(it.size)), r2(basePrice(it).v).toFixed(2).replace('.', ','), basePrice(it).u, q(c.name), GROUPS[c.g].name, r2(it.price).toFixed(2).replace('.', ',')].join(';')); });
-      (r.discounts || []).forEach(x => lines.push([dateDE(r.date), q(r.store), q(shopperNames(r)), q(r.userName), q(x.name), '', '', '', '', '', '', '', 'Rabatt', '', r2(x.amount).toFixed(2).replace('.', ',')].join(';'))); });
+    const lines = [['Datum','Geschäft','Budget','Eingekauft von','Erfasst von','Artikel','Marke','Menge','Einheit','Einzelpreis','Inhalt','Grundpreis','Grundpreis-Einheit','Kategorie','Bereich','Preis'].join(';')];
+    rs.forEach(r => { r.items.forEach(it => { const c = CAT[it.cat] || CAT.sonstiges; lines.push([dateDE(r.date), q(r.store), r.offBudget ? q('außerhalb' + (r.offNote ? ': ' + r.offNote : '')) : 'Monatsbudget', q(shopperNames(r)), q(r.userName), q(it.name), q(it.brand || ''), String(qtyOf(it)).replace('.', ','), unitOf(it), r2(it.price / qtyOf(it)).toFixed(2).replace('.', ','), q(sizeLabel(it.size)), r2(basePrice(it).v).toFixed(2).replace('.', ','), basePrice(it).u, q(c.name), GROUPS[c.g].name, r2(it.price).toFixed(2).replace('.', ',')].join(';')); });
+      (r.discounts || []).forEach(x => lines.push([dateDE(r.date), q(r.store), r.offBudget ? q('außerhalb') : 'Monatsbudget', q(shopperNames(r)), q(r.userName), q(x.name), '', '', '', '', '', '', '', 'Rabatt', '', r2(x.amount).toFixed(2).replace('.', ',')].join(';'))); });
     shareOrDownload(`Einkaufsbudget_${ui.month}.csv`, '\ufeff' + lines.join('\r\n'), 'text/csv');
   },
   async backup(){
@@ -2278,8 +2338,8 @@ const A = {
   },
   addStore(){ const v = $('#ns').value.trim(); if (!v) return; if (!S.settings.stores.includes(v)) S.settings.stores.push(v); save(); render(); },
   delStore(i){ S.settings.stores.splice(i, 1); save(); render(); },
-  dictSet(i, c){ const k = ui.dictList[i]; S.dict[k] = Object.assign({}, S.dict[k], {c, t: Date.now()}); save(); toast('Gespeichert'); },
-  dictDel(i){ const k = ui.dictList[i]; delete S.dict[k]; save(); render(); },
+  dictSet(i, c){ const k = ui.dictList[i]; S.dict[k] = Object.assign({}, S.dict[k], {c, t: Date.now()}); const lk = learnKey(k); Object.keys(S.dict).forEach(x => { if (x === '~' + lk || x.endsWith('|' + lk)) S.dict[x] = Object.assign({}, S.dict[x], {c, t: Date.now()}); }); save(); toast('Gespeichert'); },
+  dictDel(i){ const k = ui.dictList[i]; delete S.dict[k]; const lk = learnKey(k); Object.keys(S.dict).forEach(x => { if (x === '~' + lk || x.endsWith('|' + lk)) delete S.dict[x]; }); save(); render(); },
   async adminPw(){
     if (S.admin.pin){ const old = prompt('Aktueller Code:'); if (old == null) return; if ((await hashPw(old.trim(), 'admin')) !== S.admin.pin) return toast('Code falsch'); }
     const n1 = prompt('Neuer 4-stelliger Code (leer lassen = ohne Code):'); if (n1 == null) return;
